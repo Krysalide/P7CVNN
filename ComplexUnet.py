@@ -4,6 +4,10 @@ import torch.nn.functional as F
 
 from complexPyTorch.complexLayers import ComplexConv2d, ComplexReLU, ComplexBatchNorm2d, ComplexConvTranspose2d
 
+# to be tested
+from activation_layers import CReLU, CPReLU, Naive_ComplexSigmoid, Naive_ComplexTanh
+
+
 class ComplexMaxPool2d(nn.Module):
     def __init__(self, kernel_size, stride=None, padding=0, dilation=1, return_indices=False, ceil_mode=False):
         super().__init__()
@@ -88,33 +92,43 @@ def complex_mse_loss(output_re, output_im, target_re, target_im):
     return loss_re + loss_im
 
 def phase_loss(output, target):
-    # Calculer la perte de phase
+    
     phase_diff = torch.angle(output) - torch.angle(target)
-    # Ramener l'erreur entre -π et π
+    
     phase_diff = torch.atan2(torch.sin(phase_diff), torch.cos(phase_diff))
     return torch.mean(torch.abs(phase_diff))
 
+def hybrid_loss(output, target):
+    mse_loss = complex_mse_loss(output.real, output.imag, target.real, target.imag)
+    phase_loss_value = phase_loss(output, target)
+    return mse_loss + phase_loss_value
+
+# allows to test the model without using the dataloader
+# and the training loop
 if __name__ == '__main__':
-    # Exemple d'utilisation:
+    
     batch_size = 2
     in_channels = 16  
     out_channels = 16  
     height, width = 256, 512 # radar image size
 
-    # Créer un tenseur d'entrée complexe aléatoire
-    real_part = torch.randn(batch_size, in_channels, height, width)
-    imag_part = torch.randn(batch_size, in_channels, height, width)
+    
+    real_part = torch.randn(batch_size, in_channels, height, width).multiply(100)
+    imag_part = torch.randn(batch_size, in_channels, height, width).multiply(100)
     complex_input = torch.complex(real_part, imag_part)
 
-    # Instancier le modèle ComplexUNet
+    
     model = ComplexUNet(in_channels=in_channels, out_channels=out_channels)
 
-    # Effectuer une passe avant
-    output = model(complex_input)
+    model.eval()
+    with torch.no_grad():
+        output = model(complex_input)
 
-    # Afficher la forme de la sortie
-    print("Forme de l'entrée:", complex_input.shape)
-    print("Forme de la sortie:", output.shape)
-
-    loss=phase_loss(complex_input, output)
-    print("Phase loss:", loss.item())
+        
+        print("Forme de l'entrée:", complex_input.shape)
+        print("Forme de la sortie:", output.shape)
+        loss = complex_mse_loss(output.real, output.imag, real_part, imag_part)
+        print("MSE loss:", loss.item())
+        loss=phase_loss(complex_input, output)
+        print("Phase loss:", loss.item())
+        print("diff between phase loss an pi/2:", torch.abs(loss - 3.14159/2))

@@ -9,6 +9,35 @@ from torch.utils.data import DataLoader, Dataset
 #from neuralop.layers.spectral_convolution import SpectralConv2d
 import numpy as np
 
+def print_model_layers(model: nn.Module):
+    print("=== Architecture du modèle ===")
+    count_layers = 0
+    for name, module in model.named_modules():
+        if name == "":
+            # Ignorer le module racine (le modèle lui-même)
+            continue
+        count_layers += 1
+        
+        print(f"{name}: {module.__class__.__name__}")
+    print("===============================")
+    print(f"Total number of layers: {count_layers}")
+    print("=== Fin de l'architecture du modèle ===")
+
+def check_gpu_availability():
+  """Vérifie si PyTorch peut accéder à un GPU CUDA sur la machine.
+
+  Returns:
+    bool: True si un GPU CUDA est disponible et utilisable par PyTorch, False sinon.
+  """
+  if torch.cuda.is_available():
+
+    device_count = torch.cuda.device_count()
+    print(f"PyTorch has acces to {device_count} GPU(s) CUDA.")
+    for i in range(device_count):
+      print(f"  - GPU {i}: {torch.cuda.get_device_name(i)}")
+    device = torch.device("cuda")
+    return True,device
+
 
 def create_dataloaders(real_data, ra_maps, batch_size=32, test_split=0.2, val_split=0.1, random_seed=42):
     """
@@ -59,7 +88,28 @@ def create_dataloaders(real_data, ra_maps, batch_size=32, test_split=0.2, val_sp
     
     return train_loader, val_loader, test_loader
 
+def normalize_complex_amplitude(complex_tensor):
+  """
+  Normalizes a complex tensor by setting the amplitude of each complex number to 1,
+  while preserving the phase.
 
+  Args:
+    complex_tensor: A torch tensor of complex numbers with shape (batch, channels, height, width).
+
+  Returns:
+    A torch tensor of the same shape as the input, with the amplitude of each
+    complex number set to 1 and the original phase preserved.
+  """
+  amplitude = torch.abs(complex_tensor)
+  phase = torch.angle(complex_tensor)
+
+  # Avoid division by zero if any amplitude is zero.
+  # In such cases, the normalized complex number will be 0 (amplitude 0, arbitrary phase).
+  normalized_real = torch.where(amplitude != 0, torch.cos(phase), torch.zeros_like(phase))
+  normalized_imag = torch.where(amplitude != 0, torch.sin(phase), torch.zeros_like(phase))
+
+  normalized_complex = torch.complex(normalized_real, normalized_imag)
+  return normalized_complex
 
 class RadarDataset(Dataset):
     """
@@ -105,55 +155,7 @@ class RadarDataset(Dataset):
             
         return input_tensor, label_tensor
 
-# CNN able to produce range andgle maps
-class FixedSpectralNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        
-        self.preprocess = nn.Conv2d(16, 32, kernel_size=1)
-        
-        self.spectral_conv1 = SpectralConv2d(
-            in_channels=32,
-            out_channels=64,
-            n_modes=(32, 32) 
-        )
-        
-        self.spectral_conv2 = SpectralConv2d(
-            in_channels=64,
-            out_channels=128,
-            n_modes=(16, 16)
-        )
-        
-        self.output_projection = nn.Sequential(
-            nn.Conv2d(128, 64, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv2d(64, 1, kernel_size=1)  
-        )
-        
-        self.final_reshape = nn.Linear(256, 751)
-        
-    def forward(self, x):
-        
-        batch_size = x.shape[0]
-    
-        x = x.permute(0, 3, 1, 2)
-        
-        x = self.preprocess(x) 
-        
-        x = self.spectral_conv1(x)  
-        x = torch.relu(x)
-        
-        x = self.spectral_conv2(x) 
-        x = torch.relu(x)
-        
-        
-        x = self.output_projection(x)  
-    
-        x = x.squeeze(1)  
 
-        x = self.final_reshape(x)  
-        
-        return x
 
 def plot_network_loss(losses,file_name):
     """
@@ -205,7 +207,4 @@ def list_record_folders(path_d1):
     return result
 
 def __main__():
-    # Example usage
-    path_d1 = '/home/christophe/RADIalP7/DATASET/'
-    folders = list_record_folders(path_d1)
-    print(folders)
+    print('Main function of p7_utils.py')    
