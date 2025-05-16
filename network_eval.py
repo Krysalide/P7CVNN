@@ -10,10 +10,10 @@ from p7_utils import list_record_folders,create_dataloaders, print_model_layers
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 interactive = False
-graph_2D=True
-graph_3D=True
+graph_2D=False
+graph_3D=False
 
-print('TODO: change hauteur and largeur')
+
 print('TODO: push example plots to github')
 
 # conda env: complex_net
@@ -27,12 +27,11 @@ model.load_state_dict(torch.load(PATH, weights_only=True))
 model.eval()
 print('Model loaded from', PATH)
 
-
-
 print_model_layers(model)
+
 folders_adc=list_record_folders('/media/christophe/backup/DATASET/ADC/')
 
-#print(folders_adc)
+
 folders_range_doppler=list_record_folders('/media/christophe/backup/DATASET/RDGD/')
 
 adc_folder1=folders_adc[0]
@@ -117,21 +116,20 @@ try:
     print(rd_map_predicted.shape)
 
 except Exception as e:
-    print(f"Erreur lors de la prédiction: {e}")
-    sys.exit(1)
+    #print(f"Erreur lors de la prédiction: {e}")
+    raise Exception("Erreur lors de la prédiction: ", e)
 
-
+# we run over all the antennas
+# and plot the results
 for i in range(16):
     if not graph_2D:
         continue
     print(f"\n--- Antenne {i} ---")
 
     
-    sample_rd_map_antenna = sample_rd_map[i]
-    antenna_rd_predicted = rd_map_predicted[i]
+    sample_rd_map_antenna = sample_rd_map[i] # ground truth
+    antenna_rd_predicted = rd_map_predicted[i] # predicted
 
-    #print("ADC shape:", antenna_adc.shape, "type:", type(antenna_adc))
-    #print("RD  shape:", antenna_rd.shape, "type:", type(antenna_rd))
 
     # Phase
     phase_rd_gt_torch = torch.angle(sample_rd_map_antenna)
@@ -140,7 +138,7 @@ for i in range(16):
     mag_rd_map_gt_torch = torch.abs(sample_rd_map_antenna)
     mag_rd_torch = torch.abs(antenna_rd_predicted)
 
-    # Convertir en numpy
+    # Numpy conversion
     phase_adc_np = phase_rd_gt_torch.cpu().numpy()
     phase_rd_np = phase_rd_torch.cpu().detach().numpy()
     mag_adc_np = mag_rd_map_gt_torch.cpu().numpy()

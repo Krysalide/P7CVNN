@@ -21,10 +21,10 @@ class ComplexMaxPool2d(nn.Module):
         pooled_imag = self.imag_pool(imag_part)
         return torch.complex(pooled_real, pooled_imag)
 
-class ComplexUNet(nn.Module):
-    name="ComplexUNet"
+class ComplexUNetCardioid(nn.Module):
+    name="ComplexUNetCardioid"
     def __init__(self, in_channels, out_channels, features=[64, 128, 256, 512]):
-        super(ComplexUNet, self).__init__()
+        super(ComplexUNetCardioid, self).__init__()
         
         self.downs = nn.ModuleList()
         self.ups = nn.ModuleList()
@@ -32,18 +32,18 @@ class ComplexUNet(nn.Module):
 
         # Encoder (Downsampling)
         for feature in features:
-            self.downs.append(ComplexDoubleConv(in_channels, feature))
+            self.downs.append(ComplexDoubleConvCardioid(in_channels, feature))
             in_channels = feature
 
         # Bottleneck
-        self.bottleneck = ComplexDoubleConv(features[-1], features[-1] * 2)
+        self.bottleneck = ComplexDoubleConvCardioid(features[-1], features[-1] * 2)
 
         # Decoder (Upsampling)
         for feature in reversed(features):
             self.ups.append(
                 ComplexConvTranspose2d(feature * 2, feature, kernel_size=2, stride=2)
             )
-            self.ups.append(ComplexDoubleConv(feature * 2, feature))
+            self.ups.append(ComplexDoubleConvCardioid(feature * 2, feature))
 
         self.final_conv = ComplexConv2d(features[0], out_channels, kernel_size=1)
 
@@ -74,23 +74,50 @@ class ComplexUNet(nn.Module):
 
         return self.final_conv(x)
 
-
-    
-
-class ComplexDoubleConv(nn.Module):
+class ComplexDoubleConvCardioid(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(ComplexDoubleConv, self).__init__()
+        super(ComplexDoubleConvCardioid, self).__init__()
         self.conv = nn.Sequential(
             ComplexConv2d(in_channels, out_channels, kernel_size=3, padding=1),
             ComplexBatchNorm2d(out_channels),
-            ComplexReLU(),
+            Cardioid(),
             ComplexConv2d(out_channels, out_channels, kernel_size=3, padding=1),
             ComplexBatchNorm2d(out_channels),
-            ComplexReLU()
+            Cardioid()
         )
 
     def forward(self, x):
         return self.conv(x)
+
+class ComplexDoubleConvCardioid(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(ComplexDoubleConvCardioid, self).__init__()
+        self.conv = nn.Sequential(
+            ComplexConv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            ComplexBatchNorm2d(out_channels),
+            Cardioid(),
+            ComplexConv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            ComplexBatchNorm2d(out_channels),
+            Cardioid()
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+# class ComplexDoubleConv(nn.Module):
+#     def __init__(self, in_channels, out_channels):
+#         super(ComplexDoubleConv, self).__init__()
+#         self.conv = nn.Sequential(
+#             ComplexConv2d(in_channels, out_channels, kernel_size=3, padding=1),
+#             ComplexBatchNorm2d(out_channels),
+#             ComplexReLU(),
+#             ComplexConv2d(out_channels, out_channels, kernel_size=3, padding=1),
+#             ComplexBatchNorm2d(out_channels),
+#             ComplexReLU()
+#         )
+
+#     def forward(self, x):
+#         return self.conv(x)
 
 def complex_mse_loss(output_re, output_im, target_re, target_im):
     loss_re = F.mse_loss(output_re, target_re)
@@ -124,7 +151,7 @@ if __name__ == '__main__':
     complex_input = torch.complex(real_part, imag_part)
 
     
-    model = ComplexUNet(in_channels=in_channels, out_channels=out_channels)
+    model = ComplexUNetCardioid(in_channels=in_channels, out_channels=out_channels)
 
     model.eval()
     with torch.no_grad():

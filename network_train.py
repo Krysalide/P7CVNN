@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from ComplexUnet import complex_mse_loss
 from ComplexUnet import phase_loss
 from ComplexUnet import ComplexUNet
+from ComplexCardoidUnet import ComplexUNetCardioid
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -50,21 +51,36 @@ print(time.time()-start_time," seconds to load rd data")
 in_channels = 16  # shall remain fixed equal to the number of antennas
 out_channels = 16  # same as in_channels
 resume_training=True
-if resume_training:
-   PATH='/home/christophe/ComplexNet/complex_net1.pth'
-   model = ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-   model.load_state_dict(torch.load(PATH, weights_only=True))
-   save_path='/home/christophe/ComplexNet/complex_net1.pth'
+cardioid_model=True
+
+if cardioid_model:
+    model = ComplexUNetCardioid(in_channels=in_channels, out_channels=out_channels).to(device)
+    print(model.name)
+    if resume_training:
+        PATH='/home/christophe/ComplexNet/complex_cardioid_net.pth'
+        model.load_state_dict(torch.load(PATH, weights_only=True))
+        print('Model loaded from', PATH)
+        save_path='/home/christophe/ComplexNet/complex_cardioid_net.pth'
+    else:
+        save_path='/home/christophe/ComplexNet/complex_cardioid_net_one_run.pth'
+        model=ComplexUNetCardioid(in_channels=in_channels, out_channels=out_channels).to(device)
 else:
-  save_path='/home/christophe/ComplexNet/complex_net_one_run.pth'
-  model=ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
+   if resume_training:
+    PATH='/home/christophe/ComplexNet/complex_net1.pth'
+    model = ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
+    print(model.name)
+    model.load_state_dict(torch.load(PATH, weights_only=True))
+    save_path='/home/christophe/ComplexNet/complex_net1.pth'
+   else:
+    save_path='/home/christophe/ComplexNet/complex_net_one_run.pth'
+    model=ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
 
 
 learning_rate = 1e-1
 step_size = 5
 gamma = 0.96
 batch_size = 2
-epochs = 100
+epochs = 5
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 name_optimizer=optimizer.__class__.__name__
