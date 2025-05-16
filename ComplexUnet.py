@@ -92,7 +92,11 @@ class ComplexDoubleConv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
-def complex_mse_loss(output_re, output_im, target_re, target_im):
+def complex_mse_loss(output, target):
+    output_re = output.real
+    output_im = output.imag
+    target_re = target.real
+    target_im = target.imag
     loss_re = F.mse_loss(output_re, target_re)
     loss_im = F.mse_loss(output_im, target_im)
     return loss_re + loss_im
@@ -101,11 +105,11 @@ def phase_loss(output, target):
     
     phase_diff = torch.angle(output) - torch.angle(target)
     
-    phase_diff = torch.atan2(torch.sin(phase_diff), torch.cos(phase_diff))
+    #phase_diff = torch.atan2(torch.sin(phase_diff), torch.cos(phase_diff))
     return torch.mean(torch.abs(phase_diff))
 
 def hybrid_loss(output, target):
-    mse_loss = complex_mse_loss(output.real, output.imag, target.real, target.imag)
+    mse_loss = complex_mse_loss(output, target)
     phase_loss_value = phase_loss(output, target)
     return mse_loss + phase_loss_value
 

@@ -4,14 +4,15 @@ import sys
 import torch
 import torch.nn as nn
 from ComplexUnet import ComplexUNet
+from ComplexCardoidUnet import ComplexUNetCardioid
 from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
 from p7_utils import list_record_folders,create_dataloaders, print_model_layers
 
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 interactive = False
-graph_2D=False
-graph_3D=False
+graph_2D=True
+graph_3D=True
 
 
 print('TODO: push example plots to github')
@@ -20,10 +21,22 @@ print('TODO: push example plots to github')
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 print("Using device:", device)
 
+model_evaluated='ComplexUNetCardioid'
+if model_evaluated=='ComplexUNet':
+    PATH='/home/christophe/ComplexNet/complex_net1.pth'
+    model = ComplexUNet(in_channels=16, out_channels=16).to(device)
+    model.load_state_dict(torch.load(PATH, weights_only=True))
+    
 
-PATH='/home/christophe/ComplexNet/complex_net1.pth'
-model = ComplexUNet(in_channels=16, out_channels=16).to(device)
-model.load_state_dict(torch.load(PATH, weights_only=True))
+elif model_evaluated=='ComplexUNetCardioid':
+    PATH='/home/christophe/ComplexNet/complex_cardioid_net.pth'
+    model = ComplexUNetCardioid(in_channels=16, out_channels=16).to(device)
+    model.load_state_dict(torch.load(PATH, weights_only=True))
+
+else:
+    raise ValueError("Invalid model name. Choose 'ComplexUNet' or 'ComplexUNetCardioid'.")
+
+print('Type of model:', model.name)
 model.eval()
 print('Model loaded from', PATH)
 
@@ -237,31 +250,31 @@ for i in range(16):
     mag_rd_np = torch.abs(antenna_rd_predicted).cpu().detach().numpy()
     mag_diff_np = mag_adc_np - mag_rd_np
 
-    # ---------- FIGURE 1 : Phase ADC ----------
-    # fig_adc = go.Figure(data=[go.Surface(z=phase_adc_np)])
-    # fig_adc.update_layout(
-    #     title=f'Phase ADC - Antenna {i}',
-    #     scene=dict(
-    #         xaxis_title='Doppler',
-    #         yaxis_title='Range',
-    #         zaxis_title='Phase (rad)'
-    #     )
-    # )
-    # fig_adc.write_html(f'./plots/phase_adc_antenna_{i}.html')
-    # #fig_adc.show()
+    
+    fig_adc = go.Figure(data=[go.Surface(z=phase_adc_np)])
+    fig_adc.update_layout(
+        title=f'Phase ADC - Antenna {i}',
+        scene=dict(
+            xaxis_title='Doppler',
+            yaxis_title='Range',
+            zaxis_title='Phase (rad)'
+        )
+    )
+    fig_adc.write_html(f'./plots/plot3D/phase_adc_antenna_{i}.html')
+    #fig_adc.show()
 
-    # # ---------- FIGURE 2 : Phase RD ----------
-    # fig_rd = go.Figure(data=[go.Surface(z=phase_rd_np)])
-    # fig_rd.update_layout(
-    #     title=f'Phase RD (GT) - Antenna {i}',
-    #     scene=dict(
-    #         xaxis_title='Doppler',
-    #         yaxis_title='Range',
-    #         zaxis_title='Phase (rad)'
-    #     )
-    # )
-    # #fig_rd.show()
-    # fig_rd.write_html(f'./plots/phase_rd_antenna_{i}.html')
+    # ---------- FIGURE 2 : Phase RD ----------
+    fig_rd = go.Figure(data=[go.Surface(z=phase_rd_np)])
+    fig_rd.update_layout(
+        title=f'Phase RD (GT) - Antenna {i}',
+        scene=dict(
+            xaxis_title='Doppler',
+            yaxis_title='Range',
+            zaxis_title='Phase (rad)'
+        )
+    )
+    #fig_rd.show()
+    fig_rd.write_html(f'./plots/plot3D/phase_rd_antenna_{i}.html')
 
     # ---------- FIGURE 3 : Différence ----------
     fig_diff = go.Figure(data=[go.Surface(z=phase_diff_np, colorscale='RdBu')])
