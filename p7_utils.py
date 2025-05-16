@@ -30,7 +30,7 @@ def check_gpu_availability():
     bool: True si un GPU CUDA est disponible et utilisable par PyTorch, False sinon.
   """
   if torch.cuda.is_available():
-
+    
     device_count = torch.cuda.device_count()
     print(f"PyTorch has acces to {device_count} GPU(s) CUDA.")
     for i in range(device_count):

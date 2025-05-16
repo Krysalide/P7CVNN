@@ -12,12 +12,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from torch.optim.lr_scheduler import StepLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
+import mlflow
 import numpy as np
 from p7_utils import list_record_folders,plot_network_loss
 from p7_utils import create_dataloaders, check_gpu_availability
 from p7_utils import normalize_complex_amplitude
 from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
-
 
 gpu_ok,device=check_gpu_availability()
 if not gpu_ok:
@@ -58,27 +58,46 @@ if resume_training:
 else:
   save_path='/home/christophe/ComplexNet/complex_net_one_run.pth'
   model=ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-# try bigger learning rate
+
 
 learning_rate = 1e-1
+step_size = 5
+gamma = 0.96
+batch_size = 2
+epochs = 100
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-scheduler = StepLR(optimizer, step_size=5, gamma=0.9,verbose=True)
+
+name_optimizer=optimizer.__class__.__name__
+
+scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+name_scheduler=scheduler.__class__.__name__
+
 
 train_loader, val_loader, test_loader = create_dataloaders(
         adc_data,
         rd_data, 
-        batch_size=2  
+        batch_size=batch_size
     )
+mlflow.start_run()
+
+# Log parameters
+mlflow.log_param("learning_rate", learning_rate)
+mlflow.log_param("optimizer", name_optimizer)
+mlflow.log_param("scheduler", name_scheduler)
+mlflow.log_param("step_size", step_size)
+mlflow.log_param("gamma", gamma)
+mlflow.log_param("batch_size", batch_size)
+mlflow.log_param("epochs", epochs)
 
 losses=[]
 plot_losses=[]
 print('------Entering Network Training------------')
-total_epochs = 30
-print(f"Total epochs: {total_epochs}")
+
+print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
 eval_rate=10
-for epoch in range(total_epochs):
+for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
         
@@ -102,16 +121,19 @@ for epoch in range(total_epochs):
         
     avg_loss = sum(losses) / len(losses)
     plot_losses.append(avg_loss)
-    print(f'Epoch [{epoch+1}/{total_epochs}], Loss: {avg_loss:.1f}')
-    
+    print(f'Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.1f}')
+
+
+
 print(f"Total time for training: {time.time()-start_time:.2f} seconds")
 torch.save(model.state_dict(), save_path)
 print('------Model Saved------------')
+mlflow.end_run()
 plt.figure(figsize=(10, 6))
 plt.plot(plot_losses, label='Training Loss')
 plt.xlabel('Epochs')
 plt.ylabel('Loss')
-t_plot=f'Phase Loss, epochs {total_epochs} batch {train_loader.batch_size}'
+t_plot=f'Phase Loss, epochs {epochs} batch {train_loader.batch_size}'
 plt.title(t_plot)
 plt.legend()
 plt.grid(True)

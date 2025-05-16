@@ -1,9 +1,11 @@
 import torch
 
+# custom metrics for complex tensors
+
 def complex_mse_per_antenna(pred, target):
-    # Erreur complexe point à point
+    
     error = torch.abs(pred - target) ** 2  # Shape: [B, A, H, W]
-    # Moyenne sur batch et spatial
+    
     return error.mean(dim=(0, 2, 3))  # Shape: [A]
 
 def complex_mae_per_antenna(pred, target):
@@ -11,9 +13,9 @@ def complex_mae_per_antenna(pred, target):
     return error.mean(dim=(0, 2, 3))  # Shape: [A]
 
 def phase_error_per_antenna(pred, target):
-    # angle en radians ∈ [−π, π]
+    
     phase_diff = torch.angle(pred) - torch.angle(target)
-    # Ramène l'erreur entre -π et π
+   
     phase_diff = torch.atan2(torch.sin(phase_diff), torch.cos(phase_diff))
     return torch.abs(phase_diff).mean(dim=(0, 2, 3))  # Shape: [A]
 
@@ -48,15 +50,25 @@ if __name__ == '__main__':
 
     print("MSE par antenne:", mse)
     print('MSE shape:', mse.shape)
+    print('#######')
     print("MAE par antenne:", mae)
     print('MAE shape:', mae.shape)
+    print('#######')
+
     print("Erreur de phase (rad) par antenne:", phase)
     print("Erreur de phase (deg) par antenne:", phase * 180 / 3.14159)
-    print("Erreur sur l'amplitude  par antenne:",mag)
     print('Phase shape:', phase.shape)
+    print('#######')
+    print("Erreur sur l'amplitude  par antenne:",mag)
+    print("Erreur sur l'amplitude shape:", mag.shape)
+    print('#######')
+    
     print("Erreur relative par antenne:", rel)
     print('Erreur relative shape:', rel.shape)
+    print('#######')
     print("MSE réelle par antenne:", real_mse)
     print("MSE réelle shape:", real_mse.shape)
+    print('#######')
     print("MSE imaginaire par antenne:", imag_mse)
     print("MSE imaginaire shape:", imag_mse.shape)
+    print('#######')                                        

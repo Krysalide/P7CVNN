@@ -10,11 +10,11 @@ from p7_utils import list_record_folders,create_dataloaders, print_model_layers
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 interactive = False
-graph_2D=False
+graph_2D=True
 graph_3D=True
 
 print('TODO: change hauteur and largeur')
-
+print('TODO: push example plots to github')
 
 # conda env: complex_net
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -31,6 +31,7 @@ print('Model loaded from', PATH)
 
 print_model_layers(model)
 folders_adc=list_record_folders('/media/christophe/backup/DATASET/ADC/')
+
 #print(folders_adc)
 folders_range_doppler=list_record_folders('/media/christophe/backup/DATASET/RDGD/')
 
@@ -107,6 +108,7 @@ print(f"MSE réelle moyenne par antenne: {test_real_mse / test_count:.4f}")
 print(f"MSE imaginaire moyenne par antenne: {test_imag_mse / test_count:.4f}")
 print("=== Fin de l'évaluation du modèle ===")
 
+# we make one prediction for evaluating the model
 try:
     #print(sample_adc_frame.shape)
     rd_map_predicted = model(sample_adc_frame)
@@ -124,7 +126,7 @@ for i in range(16):
         continue
     print(f"\n--- Antenne {i} ---")
 
-    #antenna_adc = sample_adc_frame[i]
+    
     sample_rd_map_antenna = sample_rd_map[i]
     antenna_rd_predicted = rd_map_predicted[i]
 
@@ -149,14 +151,14 @@ for i in range(16):
 
     im1 = axes[0].imshow(phase_adc_np, cmap='viridis')
     axes[0].set_title(f'GT Phase antenna_{i}_adc')
-    axes[0].set_xlabel('Largeur')
-    axes[0].set_ylabel('Hauteur')
+    axes[0].set_xlabel('Doppler')
+    axes[0].set_ylabel('Range')
     fig.colorbar(im1, ax=axes[0], label='Phase (radians)')
 
     im2 = axes[1].imshow(phase_rd_np, cmap='viridis')
     axes[1].set_title(f'Pred Phase antenna_{i}_rd')
-    axes[1].set_xlabel('Largeur')
-    axes[1].set_ylabel('Hauteur')
+    axes[1].set_xlabel('Doppler')
+    axes[1].set_ylabel('Range')
     fig.colorbar(im2, ax=axes[1], label='Phase (radians)')
 
     plt.tight_layout()
@@ -171,8 +173,8 @@ for i in range(16):
     fig2, ax2 = plt.subplots(figsize=(6, 6))
     im_diff = ax2.imshow(phase_difference_np, cmap='coolwarm')
     ax2.set_title(f'Différence de Phase (antenna_{i}_adc - antenna_{i}_rd)')
-    ax2.set_xlabel('Largeur')
-    ax2.set_ylabel('Hauteur')
+    ax2.set_xlabel('Doppler')
+    ax2.set_ylabel('Range')
     fig2.colorbar(im_diff, ax=ax2, label='Différence de Phase (radians)')
 
     plt.tight_layout()
@@ -186,13 +188,13 @@ for i in range(16):
     fig3, axes = plt.subplots(1, 2, figsize=(12, 6))
     im3 = axes[0].imshow(mag_adc_np, cmap='viridis')
     axes[0].set_title(f'Magnitude antenna_{i}_adc')
-    axes[0].set_xlabel('Largeur')
-    axes[0].set_ylabel('Hauteur')
+    axes[0].set_xlabel('Doppler')
+    axes[0].set_ylabel('Range')
     fig3.colorbar(im3, ax=axes[0], label='Magnitude')
     im4 = axes[1].imshow(mag_rd_np, cmap='viridis')
     axes[1].set_title(f'Predicted Magnitude antenna_{i}_rd')
-    axes[1].set_xlabel('Largeur')
-    axes[1].set_ylabel('Hauteur')
+    axes[1].set_xlabel('Doppler')
+    axes[1].set_ylabel('Range')
     fig3.colorbar(im4, ax=axes[1], label='Magnitude')
     plt.tight_layout()
     if interactive:
@@ -205,8 +207,8 @@ for i in range(16):
     fig4, ax4 = plt.subplots(figsize=(6, 6))
     im_diff_mag = ax4.imshow(mag_difference_np, cmap='coolwarm')
     ax4.set_title(f'Différence de Magnitude (antenna_{i}_adc - antenna_{i}_rd)')
-    ax4.set_xlabel('Largeur')
-    ax4.set_ylabel('Hauteur')
+    ax4.set_xlabel('Doppler')
+    ax4.set_ylabel('Range')
     fig4.colorbar(im_diff_mag, ax=ax4, label='Différence de Magnitude')
     plt.tight_layout()
     if interactive:
@@ -242,8 +244,8 @@ for i in range(16):
     # fig_adc.update_layout(
     #     title=f'Phase ADC - Antenna {i}',
     #     scene=dict(
-    #         xaxis_title='Largeur',
-    #         yaxis_title='Hauteur',
+    #         xaxis_title='Doppler',
+    #         yaxis_title='Range',
     #         zaxis_title='Phase (rad)'
     #     )
     # )
@@ -255,8 +257,8 @@ for i in range(16):
     # fig_rd.update_layout(
     #     title=f'Phase RD (GT) - Antenna {i}',
     #     scene=dict(
-    #         xaxis_title='Largeur',
-    #         yaxis_title='Hauteur',
+    #         xaxis_title='Doppler',
+    #         yaxis_title='Range',
     #         zaxis_title='Phase (rad)'
     #     )
     # )
@@ -268,8 +270,8 @@ for i in range(16):
     fig_diff.update_layout(
         title=f'Différence de Phase - Antenna {i}',
         scene=dict(
-            xaxis_title='Largeur',
-            yaxis_title='Hauteur',
+            xaxis_title='Doppler',
+            yaxis_title='Range',
             zaxis_title='Différence de Phase (rad)'
         )
     )
@@ -280,8 +282,8 @@ for i in range(16):
     fig_mag.update_layout(
         title=f'Différence de magnitude - Antenna {i}',
         scene=dict(
-            xaxis_title='Largeur',
-            yaxis_title='Hauteur',
+            xaxis_title='Doppler',
+            yaxis_title='Range',
             zaxis_title='Différence de magnitude'
         )
     )

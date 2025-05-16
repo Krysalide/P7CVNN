@@ -61,6 +61,7 @@ class ComplexUNet(nn.Module):
             skip_connection = skip_connections[idx // 2]
 
             if x.shape != skip_connection.shape:
+                raise ValueError(f"Shape mismatch: {x.shape} vs {skip_connection.shape}")
                 diffY = skip_connection.size()[2] - x.size()[2]
                 diffX = skip_connection.size()[3] - x.size()[3]
                 x = F.pad(x, [diffX // 2, diffX - diffX // 2,
