@@ -73,6 +73,59 @@ class ComplexUNet(nn.Module):
             x = self.ups[idx + 1](concat_skip)
 
         return self.final_conv(x)
+    
+class SmallComplexUNet(nn.Module):
+    name="SmallComplexUNet"
+    def __init__(self, in_channels, out_channels, features=[16,32,64,128]):
+        super(SmallComplexUNet, self).__init__()
+        
+        self.downs = nn.ModuleList()
+        self.ups = nn.ModuleList()
+        self.pool = ComplexMaxPool2d(kernel_size=2, stride=2)  # Utilisez la couche de pooling complexe
+
+        # Encoder (Downsampling)
+        for feature in features:
+            self.downs.append(ComplexDoubleConv(in_channels, feature))
+            in_channels = feature
+
+        # Bottleneck
+        self.bottleneck = ComplexDoubleConv(features[-1], features[-1] * 2)
+
+        # Decoder (Upsampling)
+        for feature in reversed(features):
+            self.ups.append(
+                ComplexConvTranspose2d(feature * 2, feature, kernel_size=2, stride=2)
+            )
+            self.ups.append(ComplexDoubleConv(feature * 2, feature))
+
+        self.final_conv = ComplexConv2d(features[0], out_channels, kernel_size=1)
+
+    def forward(self, x):
+        skip_connections = []
+
+        for down in self.downs:
+            x = down(x)
+            skip_connections.append(x)
+            x = self.pool(x)
+
+        x = self.bottleneck(x)
+        skip_connections = skip_connections[::-1]
+
+        for idx in range(0, len(self.ups), 2):
+            x = self.ups[idx](x)
+            skip_connection = skip_connections[idx // 2]
+
+            if x.shape != skip_connection.shape:
+                raise ValueError(f"Shape mismatch: {x.shape} vs {skip_connection.shape}")
+                diffY = skip_connection.size()[2] - x.size()[2]
+                diffX = skip_connection.size()[3] - x.size()[3]
+                x = F.pad(x, [diffX // 2, diffX - diffX // 2,
+                                diffY // 2, diffY - diffY // 2])
+
+            concat_skip = torch.cat((skip_connection, x), dim=1)
+            x = self.ups[idx + 1](concat_skip)
+
+        return self.final_conv(x)
 
 
     
@@ -127,8 +180,10 @@ if __name__ == '__main__':
     imag_part = torch.randn(batch_size, in_channels, height, width).multiply(100)
     complex_input = torch.complex(real_part, imag_part)
 
+    model = SmallComplexUNet(in_channels=in_channels, out_channels=out_channels)
+
     
-    model = ComplexUNet(in_channels=in_channels, out_channels=out_channels)
+    #model = ComplexUNet(in_channels=in_channels, out_channels=out_channels)
 
     model.eval()
     with torch.no_grad():
@@ -137,7 +192,7 @@ if __name__ == '__main__':
         
         print("Forme de l'entrée:", complex_input.shape)
         print("Forme de la sortie:", output.shape)
-        loss = complex_mse_loss(output.real, output.imag, real_part, imag_part)
+        loss = complex_mse_loss(output, complex_input)
         print("MSE loss:", loss.item())
         loss=phase_loss(complex_input, output)
         print("Phase loss:", loss.item())
