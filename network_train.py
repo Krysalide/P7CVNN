@@ -1,7 +1,8 @@
-from enum import Enum
+# train script
 import sys
 import os
 import time
+from enum import Enum
 import random
 import numpy as np
 import matplotlib.pyplot as plt
@@ -101,7 +102,6 @@ learning_rate = 0.1
 step_size = 10
 gamma = 0.95
 batch_size = 2
-epochs = 50
 
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -152,18 +152,22 @@ mlflow.log_param("scheduler", name_scheduler)
 mlflow.log_param("step_size", step_size)
 mlflow.log_param("gamma", gamma)
 mlflow.log_param("batch_size", batch_size)
-mlflow.log_param("epochs", epochs)
+
 mlflow.log_param("loss_function", type_loss.value)
 mlflow.log_param("resume_training", resume_training)
+mlflow.log_param("number of training samples", len(train_loader.dataset))
+mlflow.log_param("number of validation samples", len(val_loader.dataset))
+mlflow.log_param("number of test samples", len(test_loader.dataset))
 
 losses=[]
 plot_losses=[]
 print('------Entering Network Training------------')
-
+epochs = 12
+mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
-eval_rate=10
+eval_rate=3
 for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
@@ -186,6 +190,29 @@ for epoch in range(epochs):
     plot_losses.append(avg_loss)
     mlflow.log_metric("epoch_loss", avg_loss, step=epoch)
     print(f'Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.4f}')
+    if (epoch+1) % eval_rate == 0:
+        model.eval()
+        mses=[]
+        phases=[]
+        with torch.no_grad():
+            for batch_data, batch_target in val_loader:
+                x = batch_data.permute(0, 3, 1, 2).to(device, torch.complex64)
+                y = batch_target.permute(0, 3, 1, 2).to(device, torch.complex64)
+                out_complex = model(x)
+                
+                mse_per_antenna=complex_mse_per_antenna(out_complex, y).mean().item()
+                mses.append(mse_per_antenna)
+                
+                
+                phase_error=phase_error_per_antenna(out_complex, y).mean().item()
+                phases.append(phase_error)
+                
+        avg_mse = sum(mses) / len(mses)
+        avg_phase = sum(phases) / len(phases)
+        print('------Validation Results------------')
+        print(f"Epoch [{epoch+1}/{epochs}], MSE per antenna: {avg_mse:.4f}")
+        print(f"Epoch [{epoch+1}/{epochs}], Phase error per antenna: {avg_phase:.4f}")
+
 
 print(f"Total time per epoch: {(time.time()-start_time)/epochs:.2f} seconds")
 if save_model:
@@ -207,9 +234,12 @@ plt.grid(True)
 
 # Enregistrement du graphique
 time_stamp = time.strftime("%m%d-%H%M")
-plt.savefig(f'training_loss_{str(time_stamp)}.png')
-print("Graphique de la loss enregistré sous:")
-print(f'training_loss_{str(time_stamp)}.png')
+plot_path = f'training_loss_{str(time_stamp)}.png'
+plt.savefig(plot_path)
+
+mlflow.log_artifact(plot_path)
+os.remove(plot_path)
+
 print('------End of Network Training------------')
 
 # 100 samples 36 seconds

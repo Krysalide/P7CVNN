@@ -9,6 +9,20 @@ from torch.utils.data import DataLoader, Dataset
 #from neuralop.layers.spectral_convolution import SpectralConv2d
 import numpy as np
 
+def get_physical_cpu_count():
+    try:
+        # Lit le nombre de CPUs physiques uniques
+        with open('/proc/cpuinfo') as f:
+            lines = f.readlines()
+            physical_ids = set()
+            for line in lines:
+                if line.startswith('physical id'):
+                    physical_ids.add(line.split(':')[1].strip())
+            return len(physical_ids) if physical_ids else 1
+    except:
+        # Fallback
+        return 1
+
 def print_model_layers(model: nn.Module):
     print("=== Architecture du modèle ===")
     count_layers = 0

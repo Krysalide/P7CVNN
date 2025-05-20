@@ -164,7 +164,7 @@ def phase_loss(output, target):
 def hybrid_loss(output, target):
     mse_loss = complex_mse_loss(output, target)
     phase_loss_value = phase_loss(output, target)
-    return mse_loss + phase_loss_value
+    return mse_loss * phase_loss_value
 
 # allows to test the model without using the dataloader
 # and the training loop

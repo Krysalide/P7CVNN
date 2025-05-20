@@ -5,35 +5,6 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import  Subset
 
 
-# ??? might be removed
-class RadarDatasetCuda(Dataset):
-    def __init__(self, save_folder, indices, device='cuda', transform=None, target_transform=None):
-        self.save_folder = save_folder
-        self.indices = indices
-        self.device = device
-        self.transform = transform
-        self.target_transform = target_transform
-
-    def __len__(self):
-        return len(self.indices)
-
-    def __getitem__(self, idx):
-        i = self.indices[idx]
-
-        # Load complex-valued numpy arrays
-        x = np.load(os.path.join(self.save_folder, f'raw_adc_{i}.npy'))  # (512, 256, 16), complex64
-        y = np.load(os.path.join(self.save_folder, f'range_doppler_map_{i}.npy'))  # could also be complex
-
-        # Convert to torch tensors
-        x = torch.from_numpy(x).to(self.device)  # torch.complex64 on GPU
-        y = torch.from_numpy(y).to(self.device)
-
-        if self.transform:
-            x = self.transform(x)
-        if self.target_transform:
-            y = self.target_transform(y)
-
-        return x, y
 
 class RadarDataset(Dataset):
     def __init__(self, save_folder, indices, transform=None, target_transform=None):
@@ -127,9 +98,15 @@ def main():
         print(x.shape, x.dtype)  # e.g., torch.Size([8, 512, 256, 16]) torch.complex64
         print(y.shape,y.dtype)
         count += 1
-        if count > 10:
+        if count > 1:
             break
-    
+    train_loader1, val_loader1, test_loader1 = split_dataloader(dataset, seed=123)
+    train_loader2, val_loader2, test_loader2 = split_dataloader(dataset, seed=123)
+
+    assert list(train_loader1.dataset.indices) == list(train_loader2.dataset.indices)
+    assert list(val_loader1.dataset.indices) == list(val_loader2.dataset.indices)
+    assert list(test_loader1.dataset.indices) == list(test_loader2.dataset.indices)
+    print("Train, val, and test loaders are identical across runs with the same seed.")
 
 if __name__ == "__main__":
     main()
