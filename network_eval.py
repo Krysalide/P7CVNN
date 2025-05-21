@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from ComplexUnet import ComplexUNet
 from ComplexCardoidUnet import ComplexUNetCardioid
-from data_reader import RadarDataset
+from data_reader import RadarDataset,split_dataloader
 from torch.utils.data import Dataset, DataLoader
 from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
 from p7_utils import list_record_folders,create_dataloaders, print_model_layers
@@ -13,11 +13,8 @@ from p7_utils import list_record_folders,create_dataloaders, print_model_layers
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 interactive = False
-graph_2D=False
-graph_3D=False
-
-
-print('TODO: push example plots to github')
+graph_2D=True
+graph_3D=True
 
 # conda env: complex_net
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -42,42 +39,19 @@ print('Type of model:', model.name)
 model.eval()
 print('Model loaded from', PATH)
 
-print_model_layers(model)
+#print_model_layers(model)
 
 sequence = 'RECORD@2020-11-21_11.54.31'
 save_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
-indices = list(range(100))
+indices = list(range(300))
 
 dataset = RadarDataset(save_folder, indices)
 print(f"Dataset length: {len(dataset)}")
-test_loader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=4,pin_memory=True)
 
-# folders_adc=list_record_folders('/media/christophe/backup/DATASET/ADC/')
+train_loader, val_loader, test_loader = split_dataloader(dataset)
+print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
 
 
-# folders_range_doppler=list_record_folders('/media/christophe/backup/DATASET/RDGD/')
-
-# adc_folder1=folders_adc[0]
-# rd_folder1=folders_range_doppler[0]
-# print(adc_folder1)
-# print(rd_folder1)
-# adc_dat_file=adc_folder1+'/complex_data.npy'
-# rd_dat_file=rd_folder1+'/rd_maps.npy'
-# start_time = time.time()
-# adc_data = np.load(adc_dat_file)
-# print(adc_data.shape)
-# print((time.time()-start_time)," seconds to load adc data")
-# start_time = time.time()
-# rd_data = np.load(rd_dat_file)
-# print(rd_data.shape)
-# print(time.time()-start_time," seconds to load rd data")
-
-# train_loader, val_loader, test_loader = create_dataloaders(
-#         adc_data,
-#         rd_data, 
-#         batch_size=2,
-#         test_split=0.9, 
-#     )
 print("=== Dataloaders created ===")
 print("Evaluating model on test set...")
 test_loss = 0.0
@@ -139,8 +113,7 @@ try:
     print(rd_map_predicted.shape)
 
 except Exception as e:
-    #print(f"Erreur lors de la prédiction: {e}")
-    raise Exception("Erreur lors de la prédiction: ", e)
+    sys.exit('error in prediction of the model')
 
 # we run over all the antennas
 # and plot the results

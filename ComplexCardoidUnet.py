@@ -104,20 +104,7 @@ class ComplexDoubleConvCardioid(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
-# class ComplexDoubleConv(nn.Module):
-#     def __init__(self, in_channels, out_channels):
-#         super(ComplexDoubleConv, self).__init__()
-#         self.conv = nn.Sequential(
-#             ComplexConv2d(in_channels, out_channels, kernel_size=3, padding=1),
-#             ComplexBatchNorm2d(out_channels),
-#             ComplexReLU(),
-#             ComplexConv2d(out_channels, out_channels, kernel_size=3, padding=1),
-#             ComplexBatchNorm2d(out_channels),
-#             ComplexReLU()
-#         )
 
-#     def forward(self, x):
-#         return self.conv(x)
 
 def complex_mse_loss(output_re, output_im, target_re, target_im):
     loss_re = F.mse_loss(output_re, target_re)
@@ -134,7 +121,7 @@ def phase_loss(output, target):
 def hybrid_loss(output, target):
     mse_loss = complex_mse_loss(output.real, output.imag, target.real, target.imag)
     phase_loss_value = phase_loss(output, target)
-    return mse_loss + phase_loss_value
+    return mse_loss * phase_loss_value
 
 # allows to test the model without using the dataloader
 # and the training loop
@@ -165,3 +152,5 @@ if __name__ == '__main__':
         loss=phase_loss(complex_input, output)
         print("Phase loss:", loss.item())
         print("diff between phase loss an pi/2:", torch.abs(loss - 3.14159/2))
+        loss2=hybrid_loss(complex_input,output)
+        print('hybrid loss :',loss2)

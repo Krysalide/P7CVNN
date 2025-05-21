@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import  Subset
+from glob import glob
 
 
 
@@ -33,6 +34,40 @@ class RadarDataset(Dataset):
             y = self.target_transform(y)
 
         return x, y
+    
+class RadarDatasetV2(Dataset):
+    def __init__(self, save_folder, indices=None, transform=None, target_transform=None, recursive=False):
+        self.save_folder = save_folder
+        self.transform = transform
+        self.target_transform = target_transform
+
+        if recursive:
+            # Find all raw_adc_*.npy files recursively
+            self.x_paths = sorted(glob(os.path.join(save_folder, '**', 'raw_adc_*.npy'), recursive=True))
+            self.y_paths = [p.replace('raw_adc_', 'range_doppler_map_') for p in self.x_paths]
+        else:
+            # Use indices to construct paths just like in the original version
+            if indices is None:
+                raise ValueError("indices must be provided when recursive=False")
+            self.x_paths = [os.path.join(save_folder, f'raw_adc_{i}.npy') for i in indices]
+            self.y_paths = [os.path.join(save_folder, f'range_doppler_map_{i}.npy') for i in indices]
+
+    def __len__(self):
+        return len(self.x_paths)
+
+    def __getitem__(self, idx):
+        x = np.load(self.x_paths[idx])  # shape: (512, 256, 16), dtype: complex64
+        y = np.load(self.y_paths[idx])  # shape: ?, dtype: complex64 or float
+
+        x = torch.from_numpy(x)
+        y = torch.from_numpy(y)
+
+        if self.transform:
+            x = self.transform(x)
+        if self.target_transform:
+            y = self.target_transform(y)
+
+        return x, y
 
 def load_data(save_folder, indices):
     dataset = RadarDataset(save_folder, indices)
@@ -41,7 +76,7 @@ def load_data(save_folder, indices):
 
 
 
-def split_dataloader(dataset, batch_size=2, num_workers=4, pin_memory=True,
+def split_dataloader(dataset, batch_size=8, num_workers=4, pin_memory=True,
                      train_ratio=0.7, val_ratio=0.1, test_ratio=0.2,
                      shuffle=True, seed=42):
     assert abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-6, "Ratios must sum to 1."

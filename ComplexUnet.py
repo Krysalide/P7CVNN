@@ -126,6 +126,60 @@ class SmallComplexUNet(nn.Module):
             x = self.ups[idx + 1](concat_skip)
 
         return self.final_conv(x)
+    
+
+class TinyComplexUNet(nn.Module):
+    name="TinyComplexUNet"
+    def __init__(self, in_channels, out_channels, features=[4,8,16,32]):
+        super(TinyComplexUNet, self).__init__()
+        
+        self.downs = nn.ModuleList()
+        self.ups = nn.ModuleList()
+        self.pool = ComplexMaxPool2d(kernel_size=2, stride=2)  # Utilisez la couche de pooling complexe
+
+        # Encoder (Downsampling)
+        for feature in features:
+            self.downs.append(ComplexDoubleConv(in_channels, feature))
+            in_channels = feature
+
+        # Bottleneck
+        self.bottleneck = ComplexDoubleConv(features[-1], features[-1] * 2)
+
+        # Decoder (Upsampling)
+        for feature in reversed(features):
+            self.ups.append(
+                ComplexConvTranspose2d(feature * 2, feature, kernel_size=2, stride=2)
+            )
+            self.ups.append(ComplexDoubleConv(feature * 2, feature))
+
+        self.final_conv = ComplexConv2d(features[0], out_channels, kernel_size=1)
+
+    def forward(self, x):
+        skip_connections = []
+
+        for down in self.downs:
+            x = down(x)
+            skip_connections.append(x)
+            x = self.pool(x)
+
+        x = self.bottleneck(x)
+        skip_connections = skip_connections[::-1]
+
+        for idx in range(0, len(self.ups), 2):
+            x = self.ups[idx](x)
+            skip_connection = skip_connections[idx // 2]
+
+            if x.shape != skip_connection.shape:
+                raise ValueError(f"Shape mismatch: {x.shape} vs {skip_connection.shape}")
+                diffY = skip_connection.size()[2] - x.size()[2]
+                diffX = skip_connection.size()[3] - x.size()[3]
+                x = F.pad(x, [diffX // 2, diffX - diffX // 2,
+                                diffY // 2, diffY - diffY // 2])
+
+            concat_skip = torch.cat((skip_connection, x), dim=1)
+            x = self.ups[idx + 1](concat_skip)
+
+        return self.final_conv(x)
 
 
     
@@ -166,6 +220,20 @@ def hybrid_loss(output, target):
     phase_loss_value = phase_loss(output, target)
     return mse_loss * phase_loss_value
 
+def is_empirically_convex(loss_fn, x1, x2, target, device='cpu', samples=10):
+    lambdas = torch.linspace(0, 1, samples)
+    convex_violations = 0
+
+    for lam in lambdas:
+        x_interp = lam * x1 + (1 - lam) * x2
+        lhs = loss_fn(x_interp, target)
+        rhs = lam * loss_fn(x1, target) + (1 - lam) * loss_fn(x2, target)
+
+        if lhs > rhs + 1e-6:  
+            convex_violations += 1
+
+    return convex_violations == 0 
+
 # allows to test the model without using the dataloader
 # and the training loop
 if __name__ == '__main__':
@@ -180,7 +248,10 @@ if __name__ == '__main__':
     imag_part = torch.randn(batch_size, in_channels, height, width).multiply(100)
     complex_input = torch.complex(real_part, imag_part)
 
-    model = SmallComplexUNet(in_channels=in_channels, out_channels=out_channels)
+    #model = SmallComplexUNet(in_channels=in_channels, out_channels=out_channels)
+
+    model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels)
+    print(model.name)
 
     
     #model = ComplexUNet(in_channels=in_channels, out_channels=out_channels)
@@ -197,3 +268,15 @@ if __name__ == '__main__':
         loss=phase_loss(complex_input, output)
         print("Phase loss:", loss.item())
         print("diff between phase loss an pi/2:", torch.abs(loss - 3.14159/2))
+
+    device='cuda'
+    x1 = torch.randn(1, 1, 64, 64, dtype=torch.complex64, requires_grad=True).to(device)
+    x2 = torch.randn(1, 1, 64, 64, dtype=torch.complex64, requires_grad=True).to(device)
+    target = torch.randn(1, 1, 64, 64, dtype=torch.complex64).to(device)
+    is_convex=is_empirically_convex(loss_fn=complex_mse_loss,x1=x1,x2=x2,target=target,device=device,samples=1000)
+    print('convexity of complex mse loss: ',is_convex)
+    is_convex=is_empirically_convex(loss_fn=hybrid_loss,x1=x1,x2=x2,target=target,device=device,samples=1000)
+    print('convexity of hybrid loss: ',is_convex)
+
+    is_convex=is_empirically_convex(loss_fn=phase_loss,x1=x1,x2=x2,target=target,device=device,samples=1000)
+    print('convexity of phase loss: ',is_convex)

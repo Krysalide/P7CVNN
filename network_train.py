@@ -11,6 +11,7 @@ from ComplexUnet import complex_mse_loss,hybrid_loss
 from ComplexUnet import phase_loss
 from ComplexUnet import ComplexUNet
 from ComplexUnet import SmallComplexUNet
+from ComplexUnet import TinyComplexUNet
 from ComplexCardoidUnet import ComplexUNetCardioid
 import torch
 import torch.nn as nn
@@ -22,28 +23,25 @@ import mlflow
 from p7_utils import list_record_folders,plot_network_loss
 from p7_utils import create_dataloaders, check_gpu_availability
 from p7_utils import normalize_complex_amplitude
-from p7_utils import get_physical_cpu_count
+
 from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
-from data_reader import RadarDataset
+from data_reader import RadarDataset,RadarDatasetV2
 from data_reader import load_data
 from data_reader import split_dataloader
-get_physical_cpu_count()
+
+
 num_cpus = os.cpu_count()
 print(f"Number of CPUs: {num_cpus}")
-gpu_ok,device=check_gpu_availability()
+
+gpu_ok,_=check_gpu_availability()
+device='cuda'
 if not gpu_ok:
     
     sys.exit('No GPU available, exiting')
     
-
-
-sequence = 'RECORD@2020-11-21_11.54.31'
-save_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
-
-
 in_channels = 16  # shall remain fixed equal to the number of antennas
 out_channels = 16  # same as in_channels
-resume_training=True
+resume_training=False
 if resume_training:
     print('Resume training')
 else:
@@ -58,6 +56,7 @@ class NetType(Enum):
     UNET = "complex_unet"
     CARDIOID_UNET = "complex_cardioid_unet"
     SMALL_UNET = "complex_small_unet"
+    TINY_UNET="complex_tiny_unet"
     
 #cardioid_model=True
 model_type=NetType.SMALL_UNET
@@ -77,11 +76,11 @@ elif model_type==NetType.UNET:
     if resume_training:
         PATH='/home/christophe/ComplexNet/complex_net1.pth'
         model = ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-        print(model.name)
+        
         model.load_state_dict(torch.load(PATH, weights_only=True))
         save_path='/home/christophe/ComplexNet/complex_net1.pth'
     else:
-        save_path='/home/christophe/ComplexNet/complex_net_one_run.pth'
+        save_path='/home/christophe/ComplexNet/complex_net_2105.pth'
         model=ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
 elif model_type==NetType.SMALL_UNET:
     if resume_training:
@@ -91,14 +90,25 @@ elif model_type==NetType.SMALL_UNET:
         model.load_state_dict(torch.load(PATH, weights_only=True))
         save_path='/home/christophe/ComplexNet/small_complex_net.pth'
     else:
-        save_path='/home/christophe/ComplexNet/small_complex_net_one_run.pth'
+        save_path='/home/christophe/ComplexNet/small_complex_net_2105.pth'
         model=SmallComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-    
+
+elif model_type==NetType.TINY_UNET:
+    if resume_training:
+        PATH='/home/christophe/ComplexNet/tiny_complex_net.pth'
+        model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
+        model.load_state_dict(torch.load(PATH, weights_only=True))
+        save_path='/home/christophe/ComplexNet/tiny_complex_net.pth' 
+    else:
+        save_path='/home/christophe/ComplexNet/tiny_complex_net_one_run.pth' 
+        model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
+
 else:
     raise ValueError("Invalid model type")
 
-print(model.name)
-learning_rate = 0.1
+print('Type of model loaded',model.name)
+
+learning_rate = 0.01
 step_size = 10
 gamma = 0.95
 batch_size = 2
@@ -121,27 +131,33 @@ if type_loss==LossType.MSE_LOSS:
     loss_function = complex_mse_loss
 elif type_loss==LossType.PHASE_LOSS:
     loss_function = phase_loss
+    print('Warning loss function seems to be non convex!!!')
+
 elif type_loss==LossType.HYBRID_LOSS:
     loss_function = hybrid_loss
 else:
     raise ValueError("Invalid loss type")
 
-# train_loader, val_loader, test_loader = create_dataloaders(
-#         adc_data,
-#         rd_data, 
-#         batch_size=batch_size
-#     )
-# train_loader = load_data(
-#     save_folder=save_folder,
-#     indices=list(range(250))
-#
-indices = list(range(250))
+full_data=True
+if not full_data:
+    # use if you want a small set of data
+    sequence = 'RECORD@2020-11-21_11.54.31'
+    data_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
+    indices = list(range(250)) # specify number of elements
 
-dataset = RadarDataset(save_folder, indices)
-print(f"Dataset length: {len(dataset)}")
-#dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=4,pin_memory=True)
-train_loader, val_loader, test_loader = split_dataloader(dataset)
+    dataset = RadarDataset(data_folder, indices)
+    print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples from sequence: {sequence})")
+
+else:
+    data_folder='/media/christophe/backup/DATARADIAL'
+    dataset=RadarDatasetV2(data_folder,recursive=True)
+    print(f"Dataset length: {len(dataset)}, gathered all data available from folder: {data_folder} ")
+    
+
+
+train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=8)
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
+
 mlflow.start_run()
 
 # Log parameters
@@ -161,13 +177,15 @@ mlflow.log_param("number of test samples", len(test_loader.dataset))
 
 losses=[]
 plot_losses=[]
+val_mse_history = []
+val_phase_history = []
 print('------Entering Network Training------------')
-epochs = 12
+epochs = 51
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
-eval_rate=3
+eval_rate=10
 for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
@@ -209,9 +227,14 @@ for epoch in range(epochs):
                 
         avg_mse = sum(mses) / len(mses)
         avg_phase = sum(phases) / len(phases)
+        val_mse_history.append(avg_mse)
+        val_phase_history.append(avg_phase)
+        mlflow.log_metric("val_mse_per_antenna", avg_mse, step=epoch) # check if step is ok?
+        mlflow.log_metric("val_phase_error_per_antenna", avg_phase, step=epoch)
         print('------Validation Results------------')
         print(f"Epoch [{epoch+1}/{epochs}], MSE per antenna: {avg_mse:.4f}")
         print(f"Epoch [{epoch+1}/{epochs}], Phase error per antenna: {avg_phase:.4f}")
+        print('------------------------------------')
 
 
 print(f"Total time per epoch: {(time.time()-start_time)/epochs:.2f} seconds")
@@ -220,25 +243,56 @@ if save_model:
     print('------MODEL SAVED------------')
 else:
     print('------MODEL NOT SAVED------------')
-#torch.save(model.state_dict(), save_path)
-print('------Model Saved------------')
-mlflow.end_run()
+
+
 plt.figure(figsize=(10, 6))
 plt.plot(plot_losses, label='Training Loss')
 plt.xlabel('Epochs')
 plt.ylabel('Loss')
-t_plot=f'Model: {model_type} epochs {epochs} batch {train_loader.batch_size} samples {len(train_loader.dataset)}'
-plt.title(t_plot)
+plot_title=f'Model: {model_type} epochs {epochs} batch {train_loader.batch_size} samples {len(train_loader.dataset)}'
+plt.title(plot_title)
 plt.legend()
 plt.grid(True)
 
-# Enregistrement du graphique
+
 time_stamp = time.strftime("%m%d-%H%M")
 plot_path = f'training_loss_{str(time_stamp)}.png'
 plt.savefig(plot_path)
+plt.close()
+
+eval_epochs = list(range(eval_rate - 1, epochs, eval_rate))
+
+plt.figure(figsize=(12, 5))
+
+# MSE plot
+plt.subplot(1, 2, 1)
+plt.plot(eval_epochs, val_mse_history, marker='o', label='Validation MSE')
+plt.xlabel('Epoch')
+plt.ylabel('MSE per antenna')
+plt.title('Validation MSE Over Epochs')
+plt.grid(True)
+plt.legend()
+
+# Phase Error plot
+plt.subplot(1, 2, 2)
+plt.plot(eval_epochs, val_phase_history, marker='x', color='orange', label='Validation Phase Error')
+plt.xlabel('Epoch')
+plt.ylabel('Phase Error per antenna')
+plt.title('Validation Phase Error Over Epochs')
+plt.grid(True)
+plt.legend()
+
+plt.tight_layout()
+plot_path2 = f'validation_metrics_{str(time_stamp)}.png'
+plt.savefig(plot_path2)
+plt.close()
+
 
 mlflow.log_artifact(plot_path)
+mlflow.log_artifact(plot_path2)
+mlflow.end_run()
 os.remove(plot_path)
+os.remove(plot_path2)
 
 print('------End of Network Training------------')
 
