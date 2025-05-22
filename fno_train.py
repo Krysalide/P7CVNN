@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from ComplexUnet import complex_mse_loss,hybrid_loss
 from ComplexUnet import phase_loss
 from neuralop.models import FNO2d
-from neuralop.losses import H1Loss
+from neuralop.losses import H1Loss,LpLoss
 
 import torch
 import torch.nn as nn
@@ -32,15 +32,17 @@ from data_reader import split_dataloader
 num_cpus = os.cpu_count()
 print(f"Number of CPUs: {num_cpus}")
 
-gpu_ok,_=check_gpu_availability()
-device='cuda'
+gpu_ok,device=check_gpu_availability()
+
+#device='cuda'
 if not gpu_ok:
     
     sys.exit('No GPU available, exiting')
     
 in_channels = 16  # shall remain fixed equal to the number of antennas
 out_channels = 16  # same as in_channels
-resume_training=True
+resume_training=False
+
 if resume_training:
     print('Resume training')
 else:
@@ -63,14 +65,14 @@ if model_type=='fno':
         print('Model loaded from', PATH)
         save_path='/home/christophe/ComplexNet/FNO/fno.pth'
     else:
-        save_path='/home/christophe/ComplexNet/FNO/fno_one_run.pth' 
+        save_path='/home/christophe/ComplexNet/FNO/fno_lp_loss.pth' 
         model=FNO2d(complex_data=True,in_channels=16,out_channels=16,n_modes_height=256,n_modes_width=512,hidden_channels=16).to(device)
 
 else:
     raise ValueError('not valid model')
 
 
-learning_rate = 0.1
+learning_rate = 0.01
 print('learning rate: ',learning_rate)
 step_size = 10
 gamma = 0.95
@@ -87,8 +89,9 @@ class LossType(Enum):
     MSE_LOSS = "mse_loss"
     PHASE_LOSS = "phase_loos"
     HYBRID_LOSS = "hybrid_loss"
+    H1_LOSS="h1_loss"
     
-type_loss=LossType.MSE_LOSS
+type_loss=LossType.H1_LOSS
 
 if type_loss==LossType.MSE_LOSS:
     loss_function = complex_mse_loss
@@ -98,15 +101,19 @@ elif type_loss==LossType.PHASE_LOSS:
 
 elif type_loss==LossType.HYBRID_LOSS:
     loss_function = hybrid_loss
+
+elif type_loss==LossType.H1_LOSS:
+    pass
 else:
     raise ValueError("Invalid loss type")
 
-full_data=True
+full_data=False
 if not full_data:
     # use if you want a small set of data
     sequence = 'RECORD@2020-11-21_11.54.31'
     data_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
-    indices = list(range(50)) # specify number of elements
+    sample_number=200
+    indices = list(range(sample_number)) # specify number of elements
 
     dataset = RadarDataset(data_folder, indices)
     print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples from sequence: {sequence})")
@@ -138,6 +145,9 @@ mlflow.log_param("number of training samples", len(train_loader.dataset))
 mlflow.log_param("number of validation samples", len(val_loader.dataset))
 mlflow.log_param("number of test samples", len(test_loader.dataset))
 
+testh1_loss=H1Loss(reduction='mean')
+test_lp_loss=LpLoss(reduction='sum')
+
 losses=[]
 plot_losses=[]
 val_mse_history = []
@@ -148,7 +158,7 @@ mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
-eval_rate=5
+eval_rate=1
 for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
@@ -159,8 +169,9 @@ for epoch in range(epochs):
     
         optimizer.zero_grad()
         out_complex = model(x)
-    
-        loss=loss_function(out_complex, y)
+        #loss=testh1_loss(out_complex,y)
+        loss=test_lp_loss(out_complex,y)
+        #loss=loss_function(out_complex, y)
         losses.append(loss.item())
         loss.backward()
         optimizer.step()
