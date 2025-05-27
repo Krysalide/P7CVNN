@@ -69,6 +69,40 @@ class RadarDatasetV2(Dataset):
 
         return x, y
 
+
+class RadarFFTDataset(Dataset):
+    def __init__(self, save_folder, indices, transform=None, target_transform=None):
+        self.save_folder = save_folder
+        self.adc_folder=save_folder+'/ADC'
+        self.fft_folder=save_folder+'/FFT'
+        self.indices = indices
+        self.transform = transform
+        self.target_transform = target_transform
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, idx):
+        i = self.indices[idx]
+
+        
+        x = np.load(os.path.join(self.adc_folder, f'raw_adc_{i}.npy'))   
+        y = np.load(os.path.join(self.fft_folder, f'first_fft_map_{i}.npy'))  
+
+        
+        x = torch.from_numpy(x)  
+        y = torch.from_numpy(y)
+
+        if self.transform:
+            x = self.transform(x)
+        if self.target_transform:
+            y = self.target_transform(y)
+
+        return x, y
+
+
+
+
 def load_data(save_folder, indices):
     dataset = RadarDataset(save_folder, indices)
     dataloader = DataLoader(dataset, batch_size=8, shuffle=True, num_workers=4,pin_memory=True)

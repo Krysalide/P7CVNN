@@ -13,9 +13,7 @@ from neuralop.models import FNO2d
 from neuralop.losses import H1Loss,LpLoss
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+
 from torch.optim.lr_scheduler import StepLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
 import mlflow
 
@@ -41,7 +39,7 @@ if not gpu_ok:
     
 in_channels = 16  # shall remain fixed equal to the number of antennas
 out_channels = 16  # same as in_channels
-resume_training=False
+resume_training=True
 
 if resume_training:
     print('Resume training')
@@ -72,7 +70,7 @@ else:
     raise ValueError('not valid model')
 
 
-learning_rate = 0.01
+learning_rate = 0.001 # try 0.1 or 0.5
 print('learning rate: ',learning_rate)
 step_size = 10
 gamma = 0.95
@@ -145,7 +143,7 @@ mlflow.log_param("number of training samples", len(train_loader.dataset))
 mlflow.log_param("number of validation samples", len(val_loader.dataset))
 mlflow.log_param("number of test samples", len(test_loader.dataset))
 
-testh1_loss=H1Loss(reduction='mean')
+test_h1_loss=H1Loss(reduction='mean')
 test_lp_loss=LpLoss(reduction='sum')
 
 losses=[]
@@ -153,12 +151,12 @@ plot_losses=[]
 val_mse_history = []
 val_phase_history = []
 print('------Entering Network Training------------')
-epochs =30
+epochs =40
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
-eval_rate=1
+eval_rate=5
 for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
@@ -169,8 +167,8 @@ for epoch in range(epochs):
     
         optimizer.zero_grad()
         out_complex = model(x)
-        #loss=testh1_loss(out_complex,y)
-        loss=test_lp_loss(out_complex,y)
+        loss=test_h1_loss(out_complex,y)
+        #loss=test_lp_loss(out_complex,y)
         #loss=loss_function(out_complex, y)
         losses.append(loss.item())
         loss.backward()

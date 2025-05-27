@@ -73,8 +73,8 @@ with torch.no_grad():
             print("Sample ADC frame shape:", sample_adc_frame.shape)
             print("Sample RD map shape:", sample_rd_map.shape)
             got_sample=True
-        x_re, x_im = x.real, x.imag
-        y_re, y_im = y.real, y.imag
+        #x_re, x_im = x.real, x.imag
+        #y_re, y_im = y.real, y.imag
 
         out_complex = model(x)
         out_re, out_im = out_complex.real, out_complex.imag

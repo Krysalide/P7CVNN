@@ -3,19 +3,18 @@ import numpy as np
 import sys
 import torch
 import torch.nn as nn
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 
 from data_reader import RadarDataset,split_dataloader
 from neuralop.models import FNO2d 
-
-
 from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
 
 
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
+
 interactive = False
-graph_2D=False
-graph_3D=False
+graph_2D=True
+graph_3D=True
 
 # conda env: complex_net
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -35,22 +34,24 @@ else:
 
 
 model.eval()
-print('Model loaded from', PATH)
+
 
 #print_model_layers(model)
 
 sequence = 'RECORD@2020-11-21_11.54.31'
 save_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
-indices = list(range(300))
+sample_number=200
+indices = list(range(sample_number))
 
 dataset = RadarDataset(save_folder, indices)
 print(f"Dataset length: {len(dataset)}")
 
-train_loader, val_loader, test_loader = split_dataloader(dataset)
+train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=8)
+print("=== Dataloaders created ===")
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
 
 
-print("=== Dataloaders created ===")
+
 print("Evaluating model on test set...")
 test_loss = 0.0
 test_mse = 0.0
@@ -71,11 +72,10 @@ with torch.no_grad():
             print("Sample ADC frame shape:", sample_adc_frame.shape)
             print("Sample RD map shape:", sample_rd_map.shape)
             got_sample=True
-        x_re, x_im = x.real, x.imag
-        y_re, y_im = y.real, y.imag
+        
 
         out_complex = model(x)
-        out_re, out_im = out_complex.real, out_complex.imag
+        
 
         mse = complex_mse_per_antenna(out_complex, y)
         mae = complex_mae_per_antenna(out_complex, y)
@@ -103,7 +103,7 @@ print(f"MSE imaginaire moyenne par antenne: {test_imag_mse / test_count:.4f}")
 print("=== Fin de l'évaluation du modèle ===")
 
 
-rd_map_predicted = model(sample_adc_frame)
+rd_map_predicted = model(sample_adc_frame.unsqueeze(0))
 print(rd_map_predicted.shape)
 rd_map_predicted=torch.squeeze(rd_map_predicted)
 print(rd_map_predicted.shape)
