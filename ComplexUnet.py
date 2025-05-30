@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
+from torch.nn import Linear
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
 from complexPyTorch.complexLayers import ComplexConv2d, ComplexReLU, ComplexBatchNorm2d, ComplexConvTranspose2d
-
+from complexPyTorch.complexLayers import ComplexLinear
 # to be tested
 from activation_layers import CReLU, CPReLU, Naive_ComplexSigmoid, Naive_ComplexTanh,Cardioid
 
@@ -28,7 +30,7 @@ class ComplexUNet(nn.Module):
         
         self.downs = nn.ModuleList()
         self.ups = nn.ModuleList()
-        self.pool = ComplexMaxPool2d(kernel_size=2, stride=2)  # Utilisez la couche de pooling complexe
+        self.pool = ComplexMaxPool2d(kernel_size=2, stride=2)  
 
         # Encoder (Downsampling)
         for feature in features:
@@ -73,6 +75,22 @@ class ComplexUNet(nn.Module):
             x = self.ups[idx + 1](concat_skip)
 
         return self.final_conv(x)
+    
+
+
+class ComplexOneLayer(nn.Module):
+    name="linear_model"
+    def __init__(self, in_channels, out_channels):
+        super(ComplexOneLayer, self).__init__()
+        
+        self.linear_complex=ComplexLinear(in_features=in_channels,out_features=out_channels)
+
+    
+
+    def forward(self, x):
+        
+
+        return self.linear_complex(x)
     
 class SmallComplexUNet(nn.Module):
     name="SmallComplexUNet"
@@ -199,6 +217,103 @@ class ComplexDoubleConv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+
+# apply_complex_custom is similar to the standard complex multiplication formula:
+# (a + ib)(c + id) = (ac - bd) + i(ad + bc)
+
+def apply_complex_custom(fr, fi, input, dtype = torch.complex64):
+    return (fr(input.real)-fi(input.imag)).type(dtype) \
+            + 1j*(fr(input.imag)+fi(input.real)).type(dtype)
+
+
+# light weight cnn, ram memory friendly
+class ComplexLinearNoBias(nn.Module):
+
+    def __init__(self, in_features, out_features):
+        super(ComplexLinearNoBias, self).__init__()
+        self.fc_r = Linear(in_features, out_features,bias=False)
+        self.fc_i = Linear(in_features, out_features,bias=False)
+
+    def forward(self, input):
+        return apply_complex_custom(self.fc_r, self.fc_i, input)
+
+def get_complex_weights(layer: ComplexLinearNoBias):
+    """Retourne les poids complexes d'une couche ComplexLinearNoBias."""
+    
+    if not isinstance(layer, ComplexLinearNoBias):
+        raise TypeError("La couche fournie n'est pas une instance de ComplexLinearNoBias.")
+    
+    # Récupère les poids réels et imaginaires
+    weight_r = layer.fc_r.weight.data
+    weight_i = layer.fc_i.weight.data
+
+    # Combine pour créer un tenseur complexe
+    weight_complex = weight_r + 1j * weight_i
+    return weight_complex
+
+def visualize_complex_plane(layer: ComplexLinearNoBias):
+    weight_r = layer.fc_r.weight.data.cpu().numpy()
+    weight_i = layer.fc_i.weight.data.cpu().numpy()
+
+    plt.figure(figsize=(6, 6))
+    plt.scatter(weight_r.flatten(), weight_i.flatten(), alpha=0.7)
+    plt.axhline(0, color='gray', lw=0.5)
+    plt.axvline(0, color='gray', lw=0.5)
+    plt.xlabel("Partie réelle")
+    plt.ylabel("Partie imaginaire")
+    plt.title("Poids complexes du modèle complexe lineaire")
+    plt.grid(True)
+    plt.axis('equal')
+    plt.tight_layout()
+    plt.show()
+
+def visualize_complex_norm(layer: ComplexLinearNoBias,interactive=False):
+    weight_r = layer.fc_r.weight.data.cpu().numpy()
+    weight_i = layer.fc_i.weight.data.cpu().numpy()
+    norm = (weight_r ** 2 + weight_i ** 2) ** 0.5
+
+    plt.figure(figsize=(6, 4))
+    plt.imshow(norm, cmap='magma')
+    plt.title("Norme des poids complexes")
+    plt.xlabel("Entrées")
+    plt.ylabel("Sorties")
+    plt.colorbar(label="Norme")
+    plt.tight_layout()
+    if interactive:
+        plt.show()
+        return 'dummy_path'
+    else:
+        save_path='/home/christophe/ComplexNet/FFT/complex_norm.png'
+        plt.savefig(save_path)
+        return save_path
+
+
+def visualize_complex_weights(layer: ComplexLinearNoBias,interactive=False):
+    weight_r = layer.fc_r.weight.data.cpu().numpy()
+    weight_i = layer.fc_i.weight.data.cpu().numpy()
+
+    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+    axs[0].imshow(weight_r, cmap='viridis')
+    axs[0].set_title("Poids réels")
+    axs[0].set_xlabel("Entrées")
+    axs[0].set_ylabel("Sorties")
+
+    axs[1].imshow(weight_i, cmap='plasma')
+    axs[1].set_title("Poids imaginaires")
+    axs[1].set_xlabel("Entrées")
+    axs[1].set_ylabel("Sorties")
+    plt.tight_layout()
+    if interactive:
+        plt.show()
+        return 'dummy_path'
+    else:
+        save_path='/home/christophe/ComplexNet/FFT/complex_weights.png'
+        plt.savefig(save_path)
+        plt.close()
+        return save_path
+
+
+
 def complex_mse_loss(output, target):
     output_re = output.real
     output_im = output.imag
@@ -233,6 +348,9 @@ def is_empirically_convex(loss_fn, x1, x2, target, device='cpu', samples=10):
             convex_violations += 1
 
     return convex_violations == 0 
+
+
+
 
 # allows to test the model without using the dataloader
 # and the training loop

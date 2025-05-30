@@ -4,10 +4,17 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+''''
+conv2D that learns fft magnitude
+able to learn a radar frame 
+Can be deleted
+'''
+
 # Parameters
-H, W = 16, 16
-batch = 10000
-in_channels = 2  # real + imag
+H, W = 256, 512
+batch = 16
+in_channels = 2 # real + imag
 out_channels = 2  # Number of "Fourier-like" filters to learn
 kernel_size = (H, W)  # Full image filters for now
 
@@ -48,11 +55,11 @@ class ConvDFTNet(nn.Module):
 model = ConvDFTNet()
 
 # Optimizer and loss
-optimizer = optim.Adam(model.parameters(), lr=0.1)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 criterion = nn.MSELoss()
 
 # Training loop
-epochs = 50
+epochs = 200
 batch_size = 100
 
 for epoch in range(epochs):
@@ -71,7 +78,7 @@ for epoch in range(epochs):
 
     print(f"Epoch {epoch+1}, Loss: {loss.item():.4f}")
 
-# Examine learned filters
+
 with torch.no_grad():
     weights = model.conv.weight.numpy()  # [out_channels, 2, H, W]
 

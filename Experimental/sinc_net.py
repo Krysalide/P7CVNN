@@ -6,6 +6,12 @@ import sys
 from torch.autograd import Variable
 import math
 
+'''
+Sinc net audio code 
+
+
+'''
+
 ## Function That I was Talking about, used in SincNet
 def flip(x, dim):
     xsize = x.size()
@@ -17,7 +23,6 @@ def flip(x, dim):
     return x.view(xsize)
     
 
-    
 
 def act_fun(act_type):
     """Function that converts dictionary String values to nn functions.

@@ -4,12 +4,27 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Parameters
-H, W = 512, 256 # height and width of 2D signal
-N = H * W
-batch = 10000
+from data_fft_reader import RadarFFTDataset
 
-# Generate random complex 2D signals
+from data_fft_reader import split_dataloader
+
+''''
+Inspired from 1D fft layer
+Model consist of one Linear layer
+Structure not adapted to our size of radar data
+Would be cool to keep the plots of weights
+
+Memory too large with our radar shape!!!
+
+Can be  deleted
+'''
+
+# Parameters
+H, W = 32, 32 # height and width of 2D signal
+N = H * W
+batch = 16
+
+#  random complex 2D signals
 sig = np.random.randn(batch, H, W) + 1j * np.random.randn(batch, H, W)
 F = np.fft.fft2(sig, axes=(-2, -1))
 
@@ -24,16 +39,19 @@ Y_tensor = torch.tensor(Y)
 # Define the model: one big linear layer
 model = nn.Linear(N * 2, N * 2, bias=False)
 
+
 # Loss and optimizer
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.1)
 
 # Training loop
-epochs = 100
-batch_size = 100
+epochs = 20000
+batch_size = 10
 
 for epoch in range(epochs):
     permutation = torch.randperm(X_tensor.size(0))
+    if epoch%100==0:
+        print(epoch)
     for i in range(0, X_tensor.size(0), batch_size):
         indices = permutation[i:i + batch_size]
         batch_x, batch_y = X_tensor[indices], Y_tensor[indices]
@@ -41,9 +59,13 @@ for epoch in range(epochs):
         optimizer.zero_grad()
         outputs = model(batch_x)
         loss = criterion(outputs, batch_y)
-        print(loss.item())
+        #print(loss.item())
         loss.backward()
         optimizer.step()
+
+
+print('last loss: ',loss.item())
+
 
 # Function to predict 2D FFT using trained model
 def ANN_2DFFT(x_np):
@@ -68,4 +90,6 @@ weights = model.weight.detach().numpy()
 plt.imshow(weights, cmap='coolwarm', vmin=-1, vmax=1)
 plt.title("Learned 2D DFT Weights")
 plt.colorbar()
+save_path='/home/christophe/ComplexNet/Experimental/weights16_16.png'
+plt.savefig(save_path)
 plt.show()
