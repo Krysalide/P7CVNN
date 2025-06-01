@@ -9,16 +9,11 @@ import matplotlib.pyplot as plt
 
 from ComplexUnet import complex_mse_loss,hybrid_loss
 from ComplexUnet import phase_loss
-from ComplexUnet import ComplexUNet
-from ComplexUnet import SmallComplexUNet
-from ComplexUnet import TinyComplexUNet
-from ComplexUnet import ComplexLinear
-from ComplexUnet import ComplexLinearNoBias
-from ComplexUnet import get_complex_weights
+#from Experimental.learnable_fft_range_wip import FFTLinearLayer
+from Experimental.learnable_fft_wip2 import FFTLinearLayerV2
+
 from ComplexUnet import visualize_complex_norm,visualize_complex_plane,visualize_complex_weights
-from ComplexCardoidUnet import ComplexUNetCardioid
-from neuralop.models import FNO2d
-from neuralop.losses import H1Loss
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -58,119 +53,10 @@ if save_model:
 else:
     print('Model will not be saved after training')
 
-class LossType(Enum):
-    MSE_LOSS = "mse_loss"
-    PHASE_LOSS = "phase_loos"
-    HYBRID_LOSS = "hybrid_loss"
-    
-type_loss=LossType.HYBRID_LOSS
-
-if type_loss==LossType.MSE_LOSS:
-    loss_function = complex_mse_loss
-elif type_loss==LossType.PHASE_LOSS:
-    loss_function = phase_loss
-    print('Warning loss function seems to be non convex!!!')
-
-elif type_loss==LossType.HYBRID_LOSS:
-    loss_function = hybrid_loss
-else:
-    raise ValueError("Invalid loss type")
-
-class NetType(Enum):
-    UNET = "complex_unet"
-    CARDIOID_UNET = "complex_cardioid_unet"
-    SMALL_UNET = "complex_small_unet"
-    TINY_UNET="complex_tiny_unet"
-    FNO="fourier_neural_operator"
-    ONE_LAYER="one_layer"
-    
-#cardioid_model=True
-model_type=NetType.ONE_LAYER
-
-if model_type==NetType.CARDIOID_UNET:
-    raise NotImplementedError
-    model = ComplexUNetCardioid(in_channels=in_channels, out_channels=out_channels).to(device)
-    
-    if resume_training:
-        PATH='/home/christophe/ComplexNet/complex_cardioid_net.pth'
-        model.load_state_dict(torch.load(PATH, weights_only=True))
-        print('Model loaded from', PATH)
-        save_path='/home/christophe/ComplexNet/complex_cardioid_net.pth'
-    else:
-        save_path='/home/christophe/ComplexNet/complex_cardioid_net_one_run.pth'
-        model=ComplexUNetCardioid(in_channels=in_channels, out_channels=out_channels).to(device)
-elif model_type==NetType.UNET:
-    if resume_training:
-        PATH='/home/christophe/ComplexNet/FFT/unet_first_fft.pth'
-        model = ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-        
-        model.load_state_dict(torch.load(PATH, weights_only=True))
-        save_path='/home/christophe/ComplexNet/FFT/unet_first_fft.pth'
-    else:
-        save_path='/home/christophe/ComplexNet/FFT/unet_first_fft.pth'
-        model=ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-    print('Type of model loaded',model.name)
-elif model_type==NetType.SMALL_UNET:
-    
-    if resume_training:
-        PATH='/home/christophe/ComplexNet/FFT/small_unet.pth'
-        model = SmallComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-        
-        model.load_state_dict(torch.load(PATH, weights_only=True))
-        save_path='/home/christophe/ComplexNet/FFT/small_unet.pth'
-    else:
-        save_path='/home/christophe/ComplexNet/FFT/small_unet.pth'
-        model=SmallComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-    print('Type of model loaded',model.name)
-
-elif model_type==NetType.FNO:
-    if resume_training:
-        print('resume training not yet implemented for fno') 
-        sys.exit()  
-    save_path='/home/christophe/ComplexNet/FFT/fno_one_fft.pth' 
-    model=FNO2d(complex_data=True,in_channels=16,out_channels=16,n_modes_height=1,n_modes_width=1,hidden_channels=2).to(device)
-    print(model)  
-    
-
-
-elif model_type==NetType.TINY_UNET:
-    #raise NotImplementedError
-    if resume_training:
-        PATH='/home/christophe/ComplexNet/FFT/tiny_complex_net.pth'
-        model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-        model.load_state_dict(torch.load(PATH, weights_only=True))
-        save_path='/home/christophe/ComplexNet/FFT/tiny_complex_net.pth' 
-    else:
-        save_path='/home/christophe/ComplexNet/FFT/tiny_complex_net.pth' 
-        model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-
-elif model_type==NetType.ONE_LAYER:
-    if resume_training:
-        PATH='/home/christophe/ComplexNet/FFT/one_layer_net.pth'
-        
-        model=ComplexLinearNoBias(in_features=256,out_features=256).to(device=device)
-        model.load_state_dict(torch.load(PATH, weights_only=True))
-        save_path=PATH
-        #loss_func=nn.MSELoss() # try it
-        loss_function=hybrid_loss
-        
-    else:
-        save_path='/home/christophe/ComplexNet/FFT/one_layer_net_one_run.pth'
-        model=ComplexLinearNoBias(in_features=256,out_features=256).to(device=device)
-        raise NotImplementedError('too many changes')
-        model.set_fcr_weight()
-        model.get_fcr_weight()
-        model.set_fci_weight()
-        model.get_fci_weight()
-        
-        sys.exit('tets done')
-        
-else:
-    raise ValueError("Invalid model type")
+model=FFTLinearLayerV2(input_size=512).to(device)
 
 learning_rate = 0.1 
-# step_size = 10
-# gamma = 1.0
+
 
 batch_size = 2
 # library higher? 
@@ -183,8 +69,10 @@ scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                  min_lr=1e-7,
                                                  threshold=100,threshold_mode='abs')
 
-#scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+
 name_scheduler=scheduler.__class__.__name__
+
+loss_function=complex_mse_loss
 
 full_data=False
 if not full_data:
@@ -212,14 +100,14 @@ mlflow.start_run()
 
 # Log parameters
 mlflow.log_param("type_of_data",'ONEFFT')
-mlflow.log_param("model_type", model_type.name)
+mlflow.log_param("model_type", 'FFT_DFT_LAYER')
 mlflow.log_param("learning_rate", learning_rate)
 mlflow.log_param("optimizer", name_optimizer)
 mlflow.log_param("scheduler", name_scheduler)
 
 mlflow.log_param("batch_size", batch_size)
 
-mlflow.log_param("loss_function", type_loss.value)
+mlflow.log_param("loss_function", 'mse')
 mlflow.log_param("resume_training", resume_training)
 mlflow.log_param("number of training samples", len(train_loader.dataset))
 mlflow.log_param("number of validation samples", len(val_loader.dataset))
@@ -231,7 +119,7 @@ val_mse_history = []
 val_phase_history = []
 val_loss_history=[]
 print('------Entering Network Training------------')
-epochs = 50
+epochs = 1
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
@@ -242,13 +130,13 @@ for epoch in range(epochs):
     for batch_data, batch_target in train_loader:
         
         
-        x = batch_data.permute(0, 3, 1, 2).to(device, torch.complex64)
-        y = batch_target.permute(0, 3, 1, 2).to(device, torch.complex64)
+        x = batch_data.to(device, torch.complex64)
+        y = batch_target.to(device, torch.complex64)
     
         optimizer.zero_grad()
         out_complex = model(x)
     
-        loss=loss_function(out_complex, y)
+        loss=complex_mse_loss(out_complex, y)
         losses.append(loss.item())
         loss.backward()
         optimizer.step()
@@ -298,27 +186,24 @@ for epoch in range(epochs):
 
 
 print(f"Total time per epoch: {(time.time()-start_time)/epochs:.2f} seconds")
-
+save_path='/home/christophe/ComplexNet/FFT/fft_layer.pth'
 if save_model:
     torch.save(model.state_dict(), save_path)
     print('------MODEL SAVED------------')
 else:
     print('------MODEL NOT SAVED------------')
 
-
-if model_type==NetType.ONE_LAYER:
+visualize=True
+if visualize:
     model.eval()
-    #weights=get_complex_weights(model)
-    path_complex_weight=visualize_complex_weights(model,interactive=False)
-    path_complex_norm=visualize_complex_norm(model,interactive=False)
-    #visualize_complex_plane(model)
+    
 
 
 plt.figure(figsize=(10, 6))
 plt.plot(plot_losses, label='Training Loss')
 plt.xlabel('Epochs')
 plt.ylabel('Loss')
-plot_title=f'Model: {model_type} epochs {epochs} batch {train_loader.batch_size} samples {len(train_loader.dataset)}'
+plot_title=f'Model: fft_layer epochs {epochs} batch {train_loader.batch_size} samples {len(train_loader.dataset)}'
 plt.title(plot_title)
 plt.legend()
 plt.grid(True)
@@ -360,17 +245,17 @@ plt.close()
 mlflow.log_artifact(plot_path)
 mlflow.log_artifact(plot_path2)
 
-if model_type==NetType.ONE_LAYER:
+# if model_type==NetType.ONE_LAYER:
 
-    mlflow.log_artifact(path_complex_weight)
-    mlflow.log_artifact(path_complex_norm)
+#     mlflow.log_artifact(path_complex_weight)
+#     mlflow.log_artifact(path_complex_norm)
 
 mlflow.end_run()
 #os.remove(plot_path)
 #os.remove(plot_path2)
-if model_type==NetType.ONE_LAYER:
-    os.remove(path_complex_weight)
-    os.remove(path_complex_norm)
+# if model_type==NetType.ONE_LAYER:
+#     os.remove(path_complex_weight)
+#     os.remove(path_complex_norm)
 
 print('------End of Network Training------------')
 

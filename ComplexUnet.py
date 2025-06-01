@@ -234,8 +234,45 @@ class ComplexLinearNoBias(nn.Module):
         self.fc_r = Linear(in_features, out_features,bias=False)
         self.fc_i = Linear(in_features, out_features,bias=False)
 
-    def forward(self, input):
+    def forwardV1(self, input):
+        
         return apply_complex_custom(self.fc_r, self.fc_i, input)
+
+    def get_fcr_weight(self):
+        print(self.fc_r.weight.shape)
+        print(self.fc_r.weight.data)
+
+    def get_fci_weight(self):
+        print(self.fc_i.weight.shape)
+        print(self.fc_i.weight.data)
+
+
+    def set_fcr_weight(self):
+        dim1=self.fc_r.weight.shape[0]
+        dim2=self.fc_r.weight.shape[1]
+        with torch.no_grad():
+            for i in range(dim1):
+                for k in range(dim2):
+                    self.fc_r.weight[i,k]=k*i
+
+
+    def set_fci_weight(self):
+        dim1=self.fc_i.weight.shape[0]
+        dim2=self.fc_i.weight.shape[1]
+        with torch.no_grad():
+            for i in range(dim1):
+                for k in range(dim2):
+                    self.fc_i.weight[i,k]=k*i
+                
+
+        
+
+    def forward(self, input):
+        real_input=torch.real(input)
+        img_input=torch.imag(input)
+        real_forward=self.fc_r(real_input)
+        img_forward=self.fc_i(img_input)
+        return real_forward+1j*img_forward
 
 def get_complex_weights(layer: ComplexLinearNoBias):
     """Retourne les poids complexes d'une couche ComplexLinearNoBias."""

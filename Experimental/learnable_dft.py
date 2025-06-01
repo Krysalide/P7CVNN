@@ -7,8 +7,13 @@ import matplotlib.pyplot as plt
 
 ''''
 To be kept for presentation ??
+shows weights after training, good to compare between initial and final
+seems to show it is better to initialize weights with real DFT
+although we have good loss results
 It is possible to initiate weights with DFT or randomly
 neural network able to learn 1D DFT very efficiently
+
+
 
 '''
 
@@ -19,13 +24,13 @@ class LearnableDFT(nn.Module):
         t = np.arange(N)
         k = t.reshape((N, 1))
 
-        # Matrices DFT "vraies"
-        # F_re = np.cos(2 * np.pi * k * t / N)
-        # F_im = -np.sin(2 * np.pi * k * t / N)
+        #Matrices DFT "vraies"
+        F_re = np.cos(2 * np.pi * k * t / N)
+        F_im = -np.sin(2 * np.pi * k * t / N)
 
         # Matrices DFT aléatoires (pour voir si le réseau apprend)
-        F_re = np.random.randn(N, N)  
-        F_im = np.random.randn(N, N)
+        # F_re = np.random.randn(N, N)  
+        # F_im = np.random.randn(N, N)
 
         self.linear_re = nn.Linear(N, N, bias=False)
         self.linear_im = nn.Linear(N, N, bias=False)
@@ -40,7 +45,7 @@ class LearnableDFT(nn.Module):
     
 N = 512
 batch_size = 128
-num_epochs = 1000
+num_epochs = 3500
 lr = 0.01
 
 
@@ -59,6 +64,9 @@ loss_fn = nn.MSELoss()
 
 # Boucle d'entraînement
 losses = []
+with torch.no_grad():
+    W_re_initial = model.linear_re.weight.detach().numpy()
+    W_im_initial= model.linear_im.weight.detach().numpy()
 
 
 for epoch in range(num_epochs):
@@ -70,12 +78,8 @@ for epoch in range(num_epochs):
     loss.backward()
     optimizer.step()
 
-    if epoch==2:
-        print(f"Epoch {epoch}: Loss = {loss.item():.6f}")
-        W_re_50 = model.linear_re.weight.detach().numpy()
-        W_im_50 = model.linear_im.weight.detach().numpy()
 
-
+    
     if epoch % 100 == 0:
         print(f"Epoch {epoch}: Loss = {loss.item():.6f}")
 
@@ -103,10 +107,10 @@ F_re = np.cos(2 * np.pi * np.outer(np.arange(N), np.arange(N)) / N)
 F_im = -np.sin(2 * np.pi * np.outer(np.arange(N), np.arange(N)) / N)
 
 axs[1, 0].imshow(F_re, aspect='auto', cmap='coolwarm')
-axs[1, 0].set_title("Poids Réels initiaux (DFT)")
+axs[1, 0].set_title("Ground truth real part (DFT)")
 
 axs[1, 1].imshow(F_im, aspect='auto', cmap='coolwarm')
-axs[1, 1].set_title("Poids Imaginaires initiaux (DFT)")
+axs[1, 1].set_title("Ground truth imaginary part (DFT)")
 
 plt.tight_layout()
 plt.show()
@@ -116,21 +120,21 @@ plt.show()
 
 fig, axs = plt.subplots(2, 2, figsize=(10, 6))
 
-axs[0, 0].imshow(W_re_50, aspect='auto', cmap='coolwarm')
-axs[0, 0].set_title("Poids Réels appris")
+axs[0, 0].imshow(W_re_initial, aspect='auto', cmap='coolwarm')
+axs[0, 0].set_title("Poids Réels initiaux")
 
-axs[0, 1].imshow(W_im_50, aspect='auto', cmap='coolwarm')
-axs[0, 1].set_title("Poids Imaginaires appris")
+axs[0, 1].imshow(W_im_initial, aspect='auto', cmap='coolwarm')
+axs[0, 1].set_title("Poids Imaginaires initiaux")
 
 # FFT computed
 F_re = np.cos(2 * np.pi * np.outer(np.arange(N), np.arange(N)) / N)
 F_im = -np.sin(2 * np.pi * np.outer(np.arange(N), np.arange(N)) / N)
 
 axs[1, 0].imshow(F_re, aspect='auto', cmap='coolwarm')
-axs[1, 0].set_title("Poids Réels initiaux (DFT)")
+axs[1, 0].set_title("Ground truth (DFT)")
 
 axs[1, 1].imshow(F_im, aspect='auto', cmap='coolwarm')
-axs[1, 1].set_title("Poids Imaginaires initiaux (DFT)")
+axs[1, 1].set_title("Ground truth (DFT)")
 
 plt.tight_layout()
 plt.show()
