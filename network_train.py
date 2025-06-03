@@ -13,6 +13,7 @@ from ComplexUnet import ComplexUNet
 from ComplexUnet import SmallComplexUNet
 from ComplexUnet import TinyComplexUNet
 from ComplexCardoidUnet import ComplexUNetCardioid
+from Experimental.learnable_fft_wip2 import SignalProcessLayer
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -57,9 +58,10 @@ class NetType(Enum):
     CARDIOID_UNET = "complex_cardioid_unet"
     SMALL_UNET = "complex_small_unet"
     TINY_UNET="complex_tiny_unet"
+    LEARN_FFT="signal_process_net"
     
 #cardioid_model=True
-model_type=NetType.SMALL_UNET
+model_type=NetType.LEARN_FFT
 
 if model_type==NetType.CARDIOID_UNET:
     model = ComplexUNetCardioid(in_channels=in_channels, out_channels=out_channels).to(device)
@@ -103,6 +105,10 @@ elif model_type==NetType.TINY_UNET:
         save_path='/home/christophe/ComplexNet/tiny_complex_net_one_run.pth' 
         model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
 
+elif model_type==NetType.LEARN_FFT:
+    save_path='/home/christophe/ComplexNet/signal_process_net.pth'
+    model=SignalProcessLayer()
+
 else:
     raise ValueError("Invalid model type")
 
@@ -138,12 +144,12 @@ elif type_loss==LossType.HYBRID_LOSS:
 else:
     raise ValueError("Invalid loss type")
 
-full_data=True
+full_data=False
 if not full_data:
     # use if you want a small set of data
     sequence = 'RECORD@2020-11-21_11.54.31'
     data_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
-    indices = list(range(250)) # specify number of elements
+    indices = list(range(30)) # specify number of elements
 
     dataset = RadarDataset(data_folder, indices)
     print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples from sequence: {sequence})")
@@ -159,6 +165,7 @@ train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=8)
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
 
 mlflow.start_run()
+print('mlflow started!!!')
 
 # Log parameters
 mlflow.log_param("model_type", model.name)
@@ -180,20 +187,23 @@ plot_losses=[]
 val_mse_history = []
 val_phase_history = []
 print('------Entering Network Training------------')
-epochs = 51
+epochs = 10
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
-eval_rate=10
+eval_rate=2
 for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
         
-        
-        x = batch_data.permute(0, 3, 1, 2).to(device, torch.complex64)
-        y = batch_target.permute(0, 3, 1, 2).to(device, torch.complex64)
-    
+        if model_type!=NetType.LEARN_FFT:
+            x = batch_data.permute(0, 3, 1, 2).to(device, torch.complex64)
+            y = batch_target.permute(0, 3, 1, 2).to(device, torch.complex64)
+        else:
+            x = batch_data.to(device, torch.complex64)
+            y = batch_target.to(device, torch.complex64)
+
         optimizer.zero_grad()
         out_complex = model(x)
     

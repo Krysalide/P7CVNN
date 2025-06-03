@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from ComplexUnet import complex_mse_loss,hybrid_loss
 from ComplexUnet import phase_loss
 #from Experimental.learnable_fft_range_wip import FFTLinearLayer
-from Experimental.learnable_fft_wip2 import FFTLinearLayerV2
+from Experimental.learnable_fft_wip2 import FirstFFTLinearLayer
 
 from ComplexUnet import visualize_complex_norm,visualize_complex_plane,visualize_complex_weights
 
@@ -53,7 +53,7 @@ if save_model:
 else:
     print('Model will not be saved after training')
 
-model=FFTLinearLayerV2(input_size=512).to(device)
+model=FirstFFTLinearLayer(input_size=512).to(device)
 
 learning_rate = 0.1 
 
