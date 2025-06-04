@@ -360,6 +360,17 @@ def complex_mse_loss(output, target):
     loss_im = F.mse_loss(output_im, target_im)
     return loss_re + loss_im
 
+# TODO work on it
+def complex_relative_mse_loss(output, target):
+    output_re = output.real
+    output_im = output.imag
+    target_re = target.real
+    target_im = target.imag
+    magnitude=torch.sqrt(torch.square(output_re)+torch.square(output_im))
+    loss_re = F.mse_loss(output_re, target_re)/magnitude
+    loss_im = F.mse_loss(output_im, target_im)/magnitude
+    return loss_re + loss_im
+
 def phase_loss(output, target):
     
     phase_diff = torch.angle(output) - torch.angle(target)

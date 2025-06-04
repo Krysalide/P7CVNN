@@ -1,4 +1,11 @@
 # train script
+
+# TODO
+# continue testing loss functions, see other tactics
+# good learning rate seem to be vary small -> maybe other optimizer?
+# increase size of dataset
+
+
 import sys
 import os
 import time
@@ -7,17 +14,21 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ComplexUnet import complex_mse_loss,hybrid_loss
+from ComplexUnet import complex_mse_loss
+from ComplexUnet import complex_relative_mse_loss
 from ComplexUnet import phase_loss
-#from Experimental.learnable_fft_range_wip import FFTLinearLayer
-from Experimental.learnable_fft_wip2 import FirstFFTLinearLayer
+
+from loss_function_relative import complex_relative_mse_loss_v1,complex_relative_mse_loss_v2
+from loss_function_relative import complex_relative_mse_loss_v3
+
+from Experimental.learnable_fft_wip2 import SignalProcessLayer
 
 from ComplexUnet import visualize_complex_norm,visualize_complex_plane,visualize_complex_weights
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+
 from torch.optim.lr_scheduler import StepLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
 import mlflow
 
@@ -26,8 +37,8 @@ from p7_utils import create_dataloaders, check_gpu_availability
 from p7_utils import normalize_complex_amplitude
 
 from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
-from data_reader import RadarFFTDataset
-
+#from data_reader import RadarFFTDataset
+from Experimental.data_fft_reader import RadarFFTDataset
 from data_reader import split_dataloader
 
 
@@ -53,10 +64,27 @@ if save_model:
 else:
     print('Model will not be saved after training')
 
-model=FirstFFTLinearLayer(input_size=512).to(device)
+model=SignalProcessLayer().to(device=device)
 
-learning_rate = 0.1 
+print('model: ',model.name,' initatiated')
 
+
+for param in model.hamming1.parameters():
+    param.requires_grad = False
+for param in model.hamming2.parameters():
+    param.requires_grad = False
+
+
+for param in model.first_fft_layer.parameters():
+    param.requires_grad = True
+for param in model.second_fft_layer.parameters():
+    param.requires_grad = True
+
+for name, param in model.named_parameters():
+    print(f"{name}: requires_grad = {param.requires_grad}")
+
+
+learning_rate = 0.001 
 
 batch_size = 2
 # library higher? 
@@ -64,26 +92,33 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,differentiable
 
 name_optimizer=optimizer.__class__.__name__
 
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', 
-                                                 factor=0.95, patience=5, 
-                                                 min_lr=1e-7,
-                                                 threshold=100,threshold_mode='abs')
+#scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', 
+                                                #  factor=0.95, patience=25, 
+                                                #  min_lr=1e-7,
+                                                # threshold=100,threshold_mode='abs')
+
+
+scheduler=StepLR(step_size=5,gamma=0.5,optimizer=optimizer)
 
 
 name_scheduler=scheduler.__class__.__name__
 
-loss_function=complex_mse_loss
+#loss_function=complex_mse_loss
+loss_function=complex_relative_mse_loss_v3
+#loss_function=complex_relative_mse_loss
 
 full_data=False
 if not full_data:
     # use if you want a small set of data
-    sequence = 'RECORD@2020-11-22_12.08.31'
+    #sequence = 'RECORD@2020-11-22_12.08.31'
     
-    data_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/{sequence}'
-    indices = list(range(242)) # specify number of elements
+    #data_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/{sequence}'
+    data_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/TEST'
+    assert os.path.exists(data_folder), 'data not found'
+    indices = list(range(60)) # specify number of elements
 
     dataset = RadarFFTDataset(data_folder, indices)
-    print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples from sequence: {sequence})")
+    print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples)")
 
 else:
     raise ValueError('recursive dataset not yet built for one fft')
@@ -119,12 +154,12 @@ val_mse_history = []
 val_phase_history = []
 val_loss_history=[]
 print('------Entering Network Training------------')
-epochs = 1
+epochs = 100
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
-eval_rate=10
+eval_rate=25
 for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
@@ -136,7 +171,7 @@ for epoch in range(epochs):
         optimizer.zero_grad()
         out_complex = model(x)
     
-        loss=complex_mse_loss(out_complex, y)
+        loss=loss_function(out_complex, y)
         losses.append(loss.item())
         loss.backward()
         optimizer.step()
@@ -154,8 +189,8 @@ for epoch in range(epochs):
         val_losses=[]
         with torch.no_grad():
             for batch_data, batch_target in val_loader:
-                x = batch_data.permute(0, 3, 1, 2).to(device, torch.complex64)
-                y = batch_target.permute(0, 3, 1, 2).to(device, torch.complex64)
+                x = batch_data.to(device, torch.complex64)
+                y = batch_target.to(device, torch.complex64)
                 out_complex = model(x)
                 loss_val=loss_function(out_complex,y).item() # same as train loss
                 val_losses.append(loss_val)
@@ -186,7 +221,7 @@ for epoch in range(epochs):
 
 
 print(f"Total time per epoch: {(time.time()-start_time)/epochs:.2f} seconds")
-save_path='/home/christophe/ComplexNet/FFT/fft_layer.pth'
+save_path='/home/christophe/ComplexNet/FFT/signal_process_layer.pth'
 if save_model:
     torch.save(model.state_dict(), save_path)
     print('------MODEL SAVED------------')

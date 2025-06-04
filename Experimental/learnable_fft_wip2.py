@@ -139,7 +139,7 @@ class Hamming_window_doppler(nn.Module):
         super(Hamming_window_doppler, self).__init__()
         self.hanning_window_doppler=torch.tensor(np.load('/home/christophe/ComplexNet/Experimental/hanning_window_dopller.npy'))
     def forward(self,complex_adc):
-        windowed_signal=torch.multiply(complex_adc,self.hanning_window_doppler)
+        windowed_signal=torch.multiply(complex_adc,self.hanning_window_doppler.to('cuda'))
         return windowed_signal
     
 class Hamming_window_rangeV2(nn.Module):
