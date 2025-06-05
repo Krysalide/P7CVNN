@@ -13,16 +13,17 @@ class FirstFFTLinearLayer(nn.Module):
         super(FirstFFTLinearLayer, self).__init__()
         self.input_size = input_size
 
-        # Create the DFT matrix as it is in custom_signam_processing
+        # Create the DFT matrix as it is in custom_signal_processing
+        # weights fit with fft matrix coefficients
         N = input_size
         j, k = np.meshgrid(np.arange(N), np.arange(N), indexing='ij')
         dft_matrix_np = np.exp(-2j * np.pi * j * k / N)
         self.dft_matrix = nn.Parameter(torch.tensor(dft_matrix_np, dtype=torch.complex64), requires_grad=False)
 
-        # 
+        
         self.linear = nn.Linear(2 * input_size, 2 * input_size, bias=False)
 
-        # Initialize the weight matrix of the linear layer with the DFT matrix
+        
         weight_matrix = torch.cat((
             torch.cat((self.dft_matrix.real, -self.dft_matrix.imag), dim=1),
             torch.cat((self.dft_matrix.imag, self.dft_matrix.real), dim=1)
@@ -36,33 +37,40 @@ class FirstFFTLinearLayer(nn.Module):
     
         # Permute the input to bring the FFT dimension to the last
         # We want the FFT to be applied along the second dimension (index 1)
-        input_reshaped = complex_adc.permute(0, 2, 3, 1) # (batch, 256, 16, 512)
+        input_reshaped = complex_adc.permute(0, 2, 3, 1) 
 
         # Flatten the non-FFT dimensions
         flattened_shape = (-1, self.input_size)
-        input_flattened = input_reshaped.reshape(flattened_shape) # (batch * 256 * 16, 512)
+        input_flattened = input_reshaped.reshape(flattened_shape) 
 
         real_input = input_flattened.real
         imag_input = input_flattened.imag
-        combined_input = torch.cat((real_input, imag_input), dim=-1) # (batch * 256 * 16, 1024)
+        combined_input = torch.cat((real_input, imag_input), dim=-1) 
 
         # Perform the linear transformation
-        combined_output = self.linear(combined_input) # (batch * 256 * 16, 1024)
+        combined_output = self.linear(combined_input)
 
         # Separate real and imaginary parts of the output
-        real_output = combined_output[..., :self.input_size] # (batch * 256 * 16, 512)
-        imag_output = combined_output[..., self.input_size:] # (batch * 256 * 16, 512)
+        # they were previously concatenated
+        real_output = combined_output[..., :self.input_size] 
+        imag_output = combined_output[..., self.input_size:]
 
         # Combine back into a complex tensor
-        output_complex_flattened = torch.complex(real_output, imag_output) # (batch * 256 * 16, 512)
+        output_complex_flattened = torch.complex(real_output, imag_output) 
 
         # Reshape back to the intermediate shape
-        output_reshaped = output_complex_flattened.reshape(input_reshaped.shape) # (batch, 256, 16, 512)
+        output_reshaped = output_complex_flattened.reshape(input_reshaped.shape) 
 
         # Permute back to the original shape with the FFT dimension in the correct place
         return output_reshaped.permute(0, 3, 1, 2) # (batch, 512, 256, 16)
     
 
+    # experimental, to see weights 
+    def get_range_fft_weights(self):
+        return self.linear.weight
+    
+# same as FirstFFTLayer except the fft is done one the third dimensions
+# size of fft differ (256 not 512)
 class SecondFFTLinearLayer(nn.Module):
     def __init__(self, input_size):
         super(SecondFFTLinearLayer, self).__init__()
@@ -88,42 +96,44 @@ class SecondFFTLinearLayer(nn.Module):
 
     def forward(self, complex_adc):
 
-
-        # Permute the input to bring the FFT dimension to the last
         # We want the FFT to be applied along the third dimension (index 2)
-        # Original: (batch, C, H, W) -> (batch, C, W, H) in this case we assume C is 512, H is 256, W is 16
+        
         input_reshaped = complex_adc.permute(0, 1, 3, 2) # (batch, 512, 16, 256) (batch, C, W, H)
 
         # Flatten the non-FFT dimensions
-        # The FFT dimension (which is now the last one) should have input_size elements
+        
         flattened_shape = (-1, self.input_size)
-        input_flattened = input_reshaped.reshape(flattened_shape) # (batch * 512 * 16, 256)
+        input_flattened = input_reshaped.reshape(flattened_shape) 
 
         real_input = input_flattened.real
         imag_input = input_flattened.imag
-        combined_input = torch.cat((real_input, imag_input), dim=-1) # (batch * 512 * 16, 512)
+        combined_input = torch.cat((real_input, imag_input), dim=-1) 
 
         # Perform the linear transformation
-        combined_output = self.linear(combined_input) # (batch * 512 * 16, 512)
+        combined_output = self.linear(combined_input) 
 
         # Separate real and imaginary parts of the output
-        real_output = combined_output[..., :self.input_size] # (batch * 512 * 16, 256)
-        imag_output = combined_output[..., self.input_size:] # (batch * 512 * 16, 256)
+        real_output = combined_output[..., :self.input_size] 
+        imag_output = combined_output[..., self.input_size:] 
 
         # Combine back into a complex tensor
-        output_complex_flattened = torch.complex(real_output, imag_output) # (batch * 512 * 16, 256)
+        output_complex_flattened = torch.complex(real_output, imag_output) 
 
         # Reshape back to the intermediate shape
-        output_reshaped = output_complex_flattened.reshape(input_reshaped.shape) # (batch, 512, 16, 256)
+        output_reshaped = output_complex_flattened.reshape(input_reshaped.shape) 
 
         # Permute back to the original shape with the FFT dimension in the correct place
-        # (batch, C, W, H) -> (batch, C, H, W)
-        return output_reshaped.permute(0, 1, 3, 2) # (batch, 512, 256, 16)
+        
+        return output_reshaped.permute(0, 1, 3, 2) 
+    
+    def get_doppler_fft_weights(self):
+        return self.linear.weight
     
 class Hamming_window_range(nn.Module):
     '''
     applies windowing as it is found in radial repo
-    if not applied results can differ greatly
+    if not applied results can differ in an important way
+    for now we have to set this layer to non trainable? 
     '''
 
     def __init__(self):
@@ -132,6 +142,11 @@ class Hamming_window_range(nn.Module):
     def forward(self,complex_adc):
         windowed_signal=torch.multiply(complex_adc,self.hanning_window_range.to('cuda'))
         return windowed_signal
+    
+    def get_window_range_coefficients(self):
+        print(self.hanning_window_range.shape)
+        return self.hanning_window_range
+
 
 
 class Hamming_window_doppler(nn.Module):
@@ -142,18 +157,23 @@ class Hamming_window_doppler(nn.Module):
         windowed_signal=torch.multiply(complex_adc,self.hanning_window_doppler.to('cuda'))
         return windowed_signal
     
-class Hamming_window_rangeV2(nn.Module):
-    def __init__(self):
-        super(Hamming_window_range, self).__init__()
-        window = np.load('/home/christophe/ComplexNet/Experimental/hanning_window_range.npy')
-        self.register_buffer('hanning_window_range', torch.tensor(window, dtype=torch.complex64))
+    def get_window_doppler_coefficients(self):
+        print(self.hanning_window_doppler.shape)
+        return self.hanning_window_doppler
+    
+# ChatGPT Code does not work
+# class Hamming_window_rangeV2(nn.Module):
+#     def __init__(self):
+#         super(Hamming_window_range, self).__init__()
+#         window = np.load('/home/christophe/ComplexNet/Experimental/hanning_window_range.npy')
+#         self.register_buffer('hanning_window_range', torch.tensor(window, dtype=torch.complex64))
 
-    def forward(self, complex_adc):
-        return complex_adc * self.hanning_window_range
+#     def forward(self, complex_adc):
+#         return complex_adc * self.hanning_window_range
     
 
 class SignalProcessLayer(nn.Module):
-    name='signal_process'
+    name='signal_process_neural_network'
     def __init__(self):
         super().__init__()
         self.hamming1 = Hamming_window_range()
@@ -170,6 +190,16 @@ class SignalProcessLayer(nn.Module):
         x=x.clone().detach().to(dtype=torch.complex64)
         x=self.second_fft_layer(x)
         return x
+    
+    def get_range_weights(self):
+        return self.first_fft_layer.get_range_fft_weights()
+    
+    def get_doppler_weights(self):
+        return self.second_fft_layer.get_doppler_fft_weights()
+    def get_window_range_coeff(self):
+        return self.hamming1.get_window_range_coefficients()
+    def get_window_doppler_coeff(self):
+        return self.hamming2.get_window_doppler_coefficients()
 
 # does not contain windowing so useless in that form
 def build_fft_by_dot_product_numpy(complex_adc):
