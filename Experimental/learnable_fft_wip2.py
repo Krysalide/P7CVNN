@@ -161,7 +161,7 @@ class Hamming_window_doppler(nn.Module):
         print(self.hanning_window_doppler.shape)
         return self.hanning_window_doppler
     
-# ChatGPT Code does not work
+# ChatGPT Code does not work ???
 # class Hamming_window_rangeV2(nn.Module):
 #     def __init__(self):
 #         super(Hamming_window_range, self).__init__()

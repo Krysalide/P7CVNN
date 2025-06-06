@@ -2,14 +2,59 @@
 
 # TODO
 # continue testing loss functions, see other tactics
-# good learning rate seem to be vary small -> maybe other optimizer?
-# increase size of dataset done
-# have a look to validation metrics
-# log with mlflow the loss function (enum?)
-# add possibility to resume training 
+# good learning rate seem to be vary small -> maybe other optimizer? -> not done
+# increase size of dataset -> done
+# have a look to validation metrics -> not done
+# log with mlflow the loss function (enum?) -> done
+# add possibility to resume training -> not done
 
-
+# x and y labels in plots
 import matplotlib.pyplot as plt
+import plotly.graph_objs as go
+import numpy as np
+
+def plot_hanning_3d_html(tensor, file_name, title="3D Tensor Surface"):
+    """
+    Creates a 3D surface plot of a PyTorch tensor of shape [512, 256, 1]
+    and saves it to an HTML file.
+    
+    Args:
+        tensor (torch.Tensor): Tensor of shape [512, 256, 1].
+        file_name (str): File name for the HTML output.
+        title (str): Plot title.
+    """
+    if not isinstance(tensor, torch.Tensor):
+        raise TypeError("Input must be a PyTorch tensor.")
+    
+    # if tensor.shape != (512, 256, 1):
+    #     raise ValueError(f"Expected tensor shape [512, 256, 1], but got {tensor.shape}.")
+
+    # Convert to 2D NumPy array
+    Z = tensor.squeeze(-1).detach().cpu().numpy()
+
+    # Create coordinate grid
+    x = np.arange(Z.shape[1])
+    y = np.arange(Z.shape[0])
+    X, Y = np.meshgrid(x, y)
+
+    # Create surface plot
+    surface = go.Surface(z=Z, x=X, y=Y, colorscale='Viridis')
+    layout = go.Layout(
+        title=title,
+        scene=dict(
+            xaxis_title='Column',
+            yaxis_title='Row',
+            zaxis_title='Value',
+        )
+    )
+    fig = go.Figure(data=[surface], layout=layout)
+
+    # Save to HTML
+    fig.write_html(f"/home/christophe/ComplexNet/plots/{file_name}")
+    print('3D plots saved to: ',f"/home/christophe/ComplexNet/plots/{file_name}")
+
+
+
 
 def plot_tensor_heatmap(tensor,file_name,show_plot, title="Tensor Heatmap", cmap="viridis"):
     """
@@ -17,9 +62,7 @@ def plot_tensor_heatmap(tensor,file_name,show_plot, title="Tensor Heatmap", cmap
     
     Args:
         tensor (torch.Tensor): 2D tensor of floats.
-        title (str): Title of the plot.
-        cmap (str): Colormap for the heatmap (e.g., 'viridis', 'hot', 'coolwarm').
-        show_values (bool): If True, overlays float values in cells.
+    
     """
     if not isinstance(tensor, torch.Tensor):
         raise TypeError("Input must be a PyTorch tensor")
@@ -32,8 +75,8 @@ def plot_tensor_heatmap(tensor,file_name,show_plot, title="Tensor Heatmap", cmap
     heatmap = plt.imshow(tensor_np, cmap=cmap, aspect='auto')
     plt.colorbar(heatmap)
     plt.title(title)
-    plt.xlabel("Column")
-    plt.ylabel("Row")
+    plt.xlabel("")
+    plt.ylabel("")
 
     
 
@@ -41,18 +84,13 @@ def plot_tensor_heatmap(tensor,file_name,show_plot, title="Tensor Heatmap", cmap
     if show_plot:
         plt.show()
     else:
-        assert file_name
+        assert file_name, 'please specify name of file to be saved'
         plt.savefig('/home/christophe/ComplexNet/plots/'+file_name)
         plt.close()
 
-def plot_hanning_window(tensor, title="Heatmap", cmap="viridis"):
+def plot_hanning_window(tensor,file_name,show_plot,title, cmap="viridis"):
     """
     Plots a heatmap for a PyTorch tensor of shape [512, 256, 1].
-
-    Args:
-        tensor (torch.Tensor): Tensor of shape [512, 256, 1].
-        title (str): Plot title.
-        cmap (str): Colormap used for the heatmap.
     """
     if not isinstance(tensor, torch.Tensor):
         raise TypeError("Input must be a PyTorch tensor.")
@@ -66,10 +104,14 @@ def plot_hanning_window(tensor, title="Heatmap", cmap="viridis"):
     heatmap = plt.imshow(tensor_2d, cmap=cmap, aspect='auto')
     plt.colorbar(heatmap)
     plt.title(title)
-    plt.xlabel("Column")
-    plt.ylabel("Row")
+    plt.xlabel("")
+    plt.ylabel("")
     plt.tight_layout()
-    plt.show()
+    if show_plot:
+        plt.show()
+    else:
+        plt.savefig('/home/christophe/ComplexNet/plots/'+file_name)
+        plt.close()
 
 import sys
 import os
@@ -112,17 +154,18 @@ from data_reader import split_dataloader
 num_cpus = os.cpu_count()
 print(f"Number of CPUs: {num_cpus}")
 
-gpu_ok,_=check_gpu_availability()
-device='cuda'
+gpu_ok,device=check_gpu_availability()
+
+#device='cuda' ???
 if not gpu_ok:
-    sys.exit('No GPU available, exiting')
+    sys.exit('No GPU available, will exit')
     
 in_channels = 16  # shall remain fixed equal to the number of antennas
 out_channels = 16  # same as in_channels
 resume_training=False
 
 if resume_training:
-    print('Resume training')
+    
     raise NotImplementedError
 else:
     print('Will start training from scratch')
@@ -136,11 +179,11 @@ else:
 
 print('model: ',model.name,' initiated')
 
-# TODO check if code ok:
+# TODO check if code ok and test with False
 for param in model.hamming1.parameters():
-    param.requires_grad = False
+    param.requires_grad = True
 for param in model.hamming2.parameters():
-    param.requires_grad = False
+    param.requires_grad = True
 
 
 for param in model.first_fft_layer.parameters():
@@ -161,16 +204,21 @@ plot_tensor_heatmap(tensor=doppler_fft_weights,title="range_fft_layer_weights_be
                     show_plot=False,file_name='fft_doppler_weights_before_train.png')
 
 hanning_window_range_coeff=model.get_window_range_coeff()
-plot_hanning_window(hanning_window_range_coeff)
+plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning.png'
+                    ,title='hanning window range',show_plot=False)
 hanning_window_doppler_coeff=model.get_window_doppler_coeff()
-plot_hanning_window(hanning_window_doppler_coeff)
+plot_hanning_window(tensor=hanning_window_doppler_coeff,file_name='hanning_doppler.png',
+                    show_plot=False,title='doppler hanning window')
+plot_hanning_3d_html(tensor=hanning_window_doppler_coeff,file_name='HANNING3D.html',title='nightly build')
+
+plot_hanning_3d_html(tensor=doppler_fft_weights,file_name='3Ddopler_fft_.html',title='fft doppler')
 print()
 
+
 model.train()
-learning_rate = 1e-5
+learning_rate = 1e-7
 
 batch_size = 2
-
 
 #optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,differentiable=False)
 #optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
@@ -184,13 +232,8 @@ name_optimizer=optimizer.__class__.__name__
 
 print('optimizer for that run: ',name_optimizer)
 
-#scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', 
-                                                #  factor=0.95, patience=25, 
-                                                #  min_lr=1e-7,
-                                                # threshold=100,threshold_mode='abs')
-
-
-scheduler=StepLR(step_size=10,gamma=0.85,optimizer=optimizer)
+# useless ? 
+scheduler=StepLR(step_size=10,gamma=0.99,optimizer=optimizer)
 
 
 name_scheduler=scheduler.__class__.__name__
@@ -205,7 +248,7 @@ class LossType(Enum):
     RELATIVE_LOSS2="relative_loss2"
     RELATIVE_LOSS3="relative_loss3"
  
-type_loss=LossType.RELATIVE_LOSS1
+type_loss=LossType.RELATIVE_LOSS2
 
 if type_loss==LossType.MSE_LOSS:
     loss_function = complex_mse_loss
@@ -224,7 +267,7 @@ elif type_loss==LossType.RELATIVE_LOSS3:
 else:
     raise ValueError("Invalid loss type")
 
-print('Loss type: ',type_loss.value)
+print('Loss type used to train: ',type_loss.value)
 
 
 print('data loading...')
@@ -254,8 +297,8 @@ print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test
 mlflow.start_run()
 
 # Log parameters
-mlflow.log_param("type_of_data",'ONEFFT')
-mlflow.log_param("model_type", 'FFT_DFT_LAYER')
+mlflow.log_param("type_of_data",'ADC2FFT')
+mlflow.log_param("model_type", 'Signal_process_layer')
 mlflow.log_param("learning_rate", learning_rate)
 mlflow.log_param("optimizer", name_optimizer)
 mlflow.log_param("scheduler", name_scheduler)
@@ -274,12 +317,12 @@ val_mse_history = []
 val_phase_history = []
 val_loss_history=[]
 print('------Entering Network Training------------')
-epochs = 50
+epochs = 100
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
-eval_rate=25
+eval_rate=20
 for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
@@ -357,6 +400,12 @@ if visualize:
     doppler_fft_weights=model.get_doppler_weights()
     plot_tensor_heatmap(tensor=doppler_fft_weights,title="doppler_fft_layer_weights_after_train",show_plot=False,
                         file_name='doppler_fft_weights_after_train.png')
+    hanning_window_range_coeff=model.get_window_range_coeff()
+    plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning_post_train.png'
+                    ,title='hanning window range post train',show_plot=False)
+    plot_hanning_3d_html(tensor=hanning_window_doppler_coeff,file_name='hanning_doppler_post_train3D.html',title='hamming window post train')
+    
+
     
 
 plt.figure(figsize=(10, 6))

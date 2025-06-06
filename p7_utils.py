@@ -38,11 +38,7 @@ def print_model_layers(model: nn.Module):
     print("=== Fin de l'architecture du modèle ===")
 
 def check_gpu_availability():
-  """Vérifie si PyTorch peut accéder à un GPU CUDA sur la machine.
-
-  Returns:
-    bool: True si un GPU CUDA est disponible et utilisable par PyTorch, False sinon.
-  """
+  
   if torch.cuda.is_available():
     
     device_count = torch.cuda.device_count()
@@ -51,6 +47,8 @@ def check_gpu_availability():
       print(f"  - GPU {i}: {torch.cuda.get_device_name(i)}")
     device = torch.device("cuda")
     return True,device
+  else:
+      return False,'cpu'
 
 
 def create_dataloaders(real_data, ra_maps, batch_size=32, test_split=0.2, val_split=0.1, random_seed=42):
