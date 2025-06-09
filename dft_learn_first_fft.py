@@ -7,11 +7,52 @@
 # have a look to validation metrics -> not done
 # log with mlflow the loss function (enum?) -> done
 # add possibility to resume training -> not done
+# 06 06 tried to add some noise or  initiate randm weights instead of DFT weights
+# VERY IMPORTANT REQUIRES GRAD INSIDE FFTLAYER
+
+# Begin time benchmark (implement torch.fft dans radial??)
 
 # x and y labels in plots
+import sys
+import os
+import time
+from enum import Enum
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+
+from ComplexUnet import complex_mse_loss
+from ComplexUnet import complex_relative_mse_loss
+from ComplexUnet import phase_loss
+from ComplexUnet import hybrid_loss
+
+# wip to be tested
+from loss_function_relative import complex_relative_mse_loss_v1,complex_relative_mse_loss_v2
+from loss_function_relative import complex_relative_mse_loss_v3
+
+from Experimental.learnable_fft_wip2 import SignalProcessLayer
+
+from ComplexUnet import visualize_complex_norm,visualize_complex_plane,visualize_complex_weights
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+from torch.optim.lr_scheduler import StepLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
+import mlflow
+
+from p7_utils import list_record_folders,plot_network_loss
+from p7_utils import create_dataloaders, check_gpu_availability
+from p7_utils import normalize_complex_amplitude
+
+from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
+#from data_reader import RadarFFTDataset
+from Experimental.data_fft_reader import RadarFFTDataset
+from data_reader import split_dataloader
+
 import matplotlib.pyplot as plt
 import plotly.graph_objs as go
-import numpy as np
+
 
 def plot_hanning_3d_html(tensor, file_name, title="3D Tensor Surface"):
     """
@@ -54,8 +95,6 @@ def plot_hanning_3d_html(tensor, file_name, title="3D Tensor Surface"):
     print('3D plots saved to: ',f"/home/christophe/ComplexNet/plots/{file_name}")
 
 
-
-
 def plot_tensor_heatmap(tensor,file_name,show_plot, title="Tensor Heatmap", cmap="viridis"):
     """
     Plots a heatmap from a 2D PyTorch tensor.
@@ -77,8 +116,6 @@ def plot_tensor_heatmap(tensor,file_name,show_plot, title="Tensor Heatmap", cmap
     plt.title(title)
     plt.xlabel("")
     plt.ylabel("")
-
-    
 
     plt.tight_layout()
     if show_plot:
@@ -113,42 +150,6 @@ def plot_hanning_window(tensor,file_name,show_plot,title, cmap="viridis"):
         plt.savefig('/home/christophe/ComplexNet/plots/'+file_name)
         plt.close()
 
-import sys
-import os
-import time
-from enum import Enum
-import random
-import numpy as np
-import matplotlib.pyplot as plt
-
-from ComplexUnet import complex_mse_loss
-from ComplexUnet import complex_relative_mse_loss
-from ComplexUnet import phase_loss
-from ComplexUnet import hybrid_loss
-
-# wip to be tested
-from loss_function_relative import complex_relative_mse_loss_v1,complex_relative_mse_loss_v2
-from loss_function_relative import complex_relative_mse_loss_v3
-
-from Experimental.learnable_fft_wip2 import SignalProcessLayer
-
-from ComplexUnet import visualize_complex_norm,visualize_complex_plane,visualize_complex_weights
-
-import torch
-import torch.nn as nn
-import torch.optim as optim
-
-from torch.optim.lr_scheduler import StepLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
-import mlflow
-
-from p7_utils import list_record_folders,plot_network_loss
-from p7_utils import create_dataloaders, check_gpu_availability
-from p7_utils import normalize_complex_amplitude
-
-from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
-#from data_reader import RadarFFTDataset
-from Experimental.data_fft_reader import RadarFFTDataset
-from data_reader import split_dataloader
 
 
 num_cpus = os.cpu_count()
@@ -169,7 +170,7 @@ if resume_training:
     raise NotImplementedError
 else:
     print('Will start training from scratch')
-    model=SignalProcessLayer().to(device=device)
+    model=SignalProcessLayer(use_fft_weights=True).to(device=device)
 
 save_model=True
 if save_model:
@@ -198,25 +199,27 @@ for name, param in model.named_parameters():
 model.eval()
 range_fft_weights=model.get_range_weights()
 plot_tensor_heatmap(tensor=range_fft_weights,title="range_fft_layer_weights_before_train",
-                    show_plot=False,file_name='fft_weights_before_train.png')
+                    show_plot=False,file_name='range_fft_weights_before_train.png')
 doppler_fft_weights=model.get_doppler_weights()
-plot_tensor_heatmap(tensor=doppler_fft_weights,title="range_fft_layer_weights_before_train",
-                    show_plot=False,file_name='fft_doppler_weights_before_train.png')
+plot_tensor_heatmap(tensor=doppler_fft_weights,title="dopller_fft_layer_weights_before_train",
+                    show_plot=False,file_name='doppler__fft_weights_before_train.png')
 
-hanning_window_range_coeff=model.get_window_range_coeff()
-plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning.png'
+plot_hamming=False
+if plot_hamming:
+    hanning_window_range_coeff=model.get_window_range_coeff()
+    plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning.png'
                     ,title='hanning window range',show_plot=False)
-hanning_window_doppler_coeff=model.get_window_doppler_coeff()
-plot_hanning_window(tensor=hanning_window_doppler_coeff,file_name='hanning_doppler.png',
+    hanning_window_doppler_coeff=model.get_window_doppler_coeff()
+    plot_hanning_window(tensor=hanning_window_doppler_coeff,file_name='hanning_doppler.png',
                     show_plot=False,title='doppler hanning window')
-plot_hanning_3d_html(tensor=hanning_window_doppler_coeff,file_name='HANNING3D.html',title='nightly build')
+    plot_hanning_3d_html(tensor=hanning_window_doppler_coeff,file_name='HANNING3D.html',title='nightly build')
 
-plot_hanning_3d_html(tensor=doppler_fft_weights,file_name='3Ddopler_fft_.html',title='fft doppler')
-print()
+    plot_hanning_3d_html(tensor=doppler_fft_weights,file_name='3Ddopler_fft_.html',title='fft doppler')
+    print()
 
 
 model.train()
-learning_rate = 1e-7
+learning_rate = 0.5
 
 batch_size = 2
 
@@ -233,7 +236,7 @@ name_optimizer=optimizer.__class__.__name__
 print('optimizer for that run: ',name_optimizer)
 
 # useless ? 
-scheduler=StepLR(step_size=10,gamma=0.99,optimizer=optimizer)
+scheduler=StepLR(step_size=20,gamma=0.95,optimizer=optimizer)
 
 
 name_scheduler=scheduler.__class__.__name__
@@ -248,7 +251,7 @@ class LossType(Enum):
     RELATIVE_LOSS2="relative_loss2"
     RELATIVE_LOSS3="relative_loss3"
  
-type_loss=LossType.RELATIVE_LOSS2
+type_loss=LossType.RELATIVE_LOSS3
 
 if type_loss==LossType.MSE_LOSS:
     loss_function = complex_mse_loss
@@ -270,7 +273,7 @@ else:
 print('Loss type used to train: ',type_loss.value)
 
 
-print('data loading...')
+print('Entering data loading...')
 full_data=False
 if not full_data:
     
@@ -298,7 +301,7 @@ mlflow.start_run()
 
 # Log parameters
 mlflow.log_param("type_of_data",'ADC2FFT')
-mlflow.log_param("model_type", 'Signal_process_layer')
+mlflow.log_param("model_type", model.name)
 mlflow.log_param("learning_rate", learning_rate)
 mlflow.log_param("optimizer", name_optimizer)
 mlflow.log_param("scheduler", name_scheduler)
@@ -339,7 +342,11 @@ for epoch in range(epochs):
         loss.backward()
         optimizer.step()
         
-    
+        
+    scheduler.step()
+    current_lr = optimizer.param_groups[0]['lr']
+    mlflow.log_metric("learning_rate_per_epoch", current_lr, step=epoch)
+
         
     avg_loss = sum(losses) / len(losses)
     plot_losses.append(avg_loss)
@@ -400,10 +407,11 @@ if visualize:
     doppler_fft_weights=model.get_doppler_weights()
     plot_tensor_heatmap(tensor=doppler_fft_weights,title="doppler_fft_layer_weights_after_train",show_plot=False,
                         file_name='doppler_fft_weights_after_train.png')
-    hanning_window_range_coeff=model.get_window_range_coeff()
-    plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning_post_train.png'
+    if plot_hamming:
+        hanning_window_range_coeff=model.get_window_range_coeff()
+        plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning_post_train.png'
                     ,title='hanning window range post train',show_plot=False)
-    plot_hanning_3d_html(tensor=hanning_window_doppler_coeff,file_name='hanning_doppler_post_train3D.html',title='hamming window post train')
+        plot_hanning_3d_html(tensor=hanning_window_doppler_coeff,file_name='hanning_doppler_post_train3D.html',title='hamming window post train')
     
 
     

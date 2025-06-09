@@ -73,13 +73,13 @@ def complex_relative_mse_loss_v3(output, target):
 
     return relative_loss
 
-# Example Usage (assuming PyTorch tensors)
+# For test!!!
 if __name__ == "__main__":
-    # Create some dummy complex tensors
+    #
     output_complex = torch.randn(5, dtype=torch.complex64)
     target_complex = torch.randn(5, dtype=torch.complex64)
 
-    # Let's make some targets small to test epsilon
+    # 
     target_complex[0] = 0.01 + 0.02j
     output_complex[0] = 0.02 + 0.03j
     target_complex[1] = 1e-5 + 1e-5j # Very small target

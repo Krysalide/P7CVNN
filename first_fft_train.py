@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 
 from ComplexUnet import complex_mse_loss,hybrid_loss
 from ComplexUnet import phase_loss
+from loss_function_relative import  complex_relative_mse_loss_v1,complex_relative_mse_loss_v2
+from loss_function_relative import complex_relative_mse_loss_v3
 from ComplexUnet import ComplexUNet
 from ComplexUnet import SmallComplexUNet
 from ComplexUnet import TinyComplexUNet
@@ -34,7 +36,6 @@ from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phas
 from data_reader import RadarFFTDataset
 
 from data_reader import split_dataloader
-
 
 num_cpus = os.cpu_count()
 print(f"Number of CPUs: {num_cpus}")
@@ -62,8 +63,9 @@ class LossType(Enum):
     MSE_LOSS = "mse_loss"
     PHASE_LOSS = "phase_loos"
     HYBRID_LOSS = "hybrid_loss"
+    RELATIVE_LOSS="relative_loss"
     
-type_loss=LossType.HYBRID_LOSS
+type_loss=LossType.RELATIVE_LOSS
 
 if type_loss==LossType.MSE_LOSS:
     loss_function = complex_mse_loss
@@ -73,6 +75,8 @@ elif type_loss==LossType.PHASE_LOSS:
 
 elif type_loss==LossType.HYBRID_LOSS:
     loss_function = hybrid_loss
+elif type_loss==LossType.RELATIVE_LOSS:
+    loss_function=complex_relative_mse_loss_v1
 else:
     raise ValueError("Invalid loss type")
 
@@ -85,7 +89,7 @@ class NetType(Enum):
     ONE_LAYER="one_layer"
     
 #cardioid_model=True
-model_type=NetType.ONE_LAYER
+model_type=NetType.UNET
 
 if model_type==NetType.CARDIOID_UNET:
     raise NotImplementedError
@@ -109,7 +113,7 @@ elif model_type==NetType.UNET:
     else:
         save_path='/home/christophe/ComplexNet/FFT/unet_first_fft.pth'
         model=ComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-    print('Type of model loaded',model.name)
+    
 elif model_type==NetType.SMALL_UNET:
     
     if resume_training:
@@ -145,7 +149,9 @@ elif model_type==NetType.TINY_UNET:
         model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
 
 elif model_type==NetType.ONE_LAYER:
+    raise ValueError
     if resume_training:
+        
         PATH='/home/christophe/ComplexNet/FFT/one_layer_net.pth'
         
         model=ComplexLinearNoBias(in_features=256,out_features=256).to(device=device)
@@ -167,14 +173,16 @@ elif model_type==NetType.ONE_LAYER:
         
 else:
     raise ValueError("Invalid model type")
-
+print('Type of model loaded',model.name)
 learning_rate = 0.1 
 # step_size = 10
 # gamma = 1.0
 
 batch_size = 2
 # library higher? 
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,differentiable=False)
+#optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,differentiable=False)
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 name_optimizer=optimizer.__class__.__name__
 

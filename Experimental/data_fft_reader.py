@@ -104,6 +104,16 @@ class RadarFFTDataset(Dataset):
             y = self.target_transform(y)
 
         return x, y
+    
+    def get_adc(self,idx):
+        i = self.indices[idx]
+        x = np.load(os.path.join(self.adc_folder, f'raw_adc_{i}.npy'))  
+        return x
+    
+    def get_range_doppler(self,idx):
+        i = self.indices[idx]   
+        y = np.load(os.path.join(self.fft_range_dopller, f'second_fft_{i}.npy')) 
+        return y
 
 
 

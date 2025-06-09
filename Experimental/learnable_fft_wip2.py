@@ -9,17 +9,23 @@ Last up to date version
 # TODO add windowing!! inside FFTLinearLayer
 
 class FirstFFTLinearLayer(nn.Module):
-    def __init__(self, input_size):
+    def __init__(self, input_size,use_fft_weights=True):
         super(FirstFFTLinearLayer, self).__init__()
         self.input_size = input_size
-
+        self.use_fft_weights=use_fft_weights
+        N = input_size
         # Create the DFT matrix as it is in custom_signal_processing
         # weights fit with fft matrix coefficients
-        N = input_size
-        j, k = np.meshgrid(np.arange(N), np.arange(N), indexing='ij')
-        dft_matrix_np = np.exp(-2j * np.pi * j * k / N)
-        self.dft_matrix = nn.Parameter(torch.tensor(dft_matrix_np, dtype=torch.complex64), requires_grad=False)
-
+        if use_fft_weights:
+            
+            j, k = np.meshgrid(np.arange(N), np.arange(N), indexing='ij')
+            dft_matrix_np = np.exp(-2j * np.pi * j * k / N)
+            self.dft_matrix = nn.Parameter(torch.tensor(dft_matrix_np, dtype=torch.complex64), requires_grad=False)
+        else:
+            # Random unit magnitude complex matrix
+            phase = 2 * np.pi * np.random.rand(N, N)
+            dft_matrix_np = np.exp(1j * phase)
+            self.dft_matrix = torch.tensor(dft_matrix_np, dtype=torch.complex64)
         
         self.linear = nn.Linear(2 * input_size, 2 * input_size, bias=False)
 
@@ -72,15 +78,22 @@ class FirstFFTLinearLayer(nn.Module):
 # same as FirstFFTLayer except the fft is done one the third dimensions
 # size of fft differ (256 not 512)
 class SecondFFTLinearLayer(nn.Module):
-    def __init__(self, input_size):
+    def __init__(self, input_size,use_fft_weights=True):
         super(SecondFFTLinearLayer, self).__init__()
         self.input_size = input_size
+        self.use_fft_weights=use_fft_weights
 
-        # Create the DFT matrix as it is in custom_signam_processing
+        
         N = input_size
-        j, k = np.meshgrid(np.arange(N), np.arange(N), indexing='ij')
-        dft_matrix_np = np.exp(-2j * np.pi * j * k / N)
-        self.dft_matrix = nn.Parameter(torch.tensor(dft_matrix_np, dtype=torch.complex64), requires_grad=False)
+        if use_fft_weights:
+        # Create the DFT matrix as it is in custom_signam_processing
+            j, k = np.meshgrid(np.arange(N), np.arange(N), indexing='ij')
+            dft_matrix_np = np.exp(-2j * np.pi * j * k / N)
+            self.dft_matrix = nn.Parameter(torch.tensor(dft_matrix_np, dtype=torch.complex64), requires_grad=False)
+        else:
+            phase = 2 * np.pi * np.random.rand(N, N)
+            dft_matrix_np = np.exp(1j * phase)
+            self.dft_matrix = torch.tensor(dft_matrix_np, dtype=torch.complex64)
 
         #
         self.linear = nn.Linear(2 * input_size, 2 * input_size, bias=False)
@@ -174,12 +187,12 @@ class Hamming_window_doppler(nn.Module):
 
 class SignalProcessLayer(nn.Module):
     name='signal_process_neural_network'
-    def __init__(self):
+    def __init__(self,use_fft_weights=True):
         super().__init__()
         self.hamming1 = Hamming_window_range()
-        self.first_fft_layer=FirstFFTLinearLayer(input_size=512)
+        self.first_fft_layer=FirstFFTLinearLayer(input_size=512,use_fft_weights=use_fft_weights)
         self.hamming2=Hamming_window_doppler()
-        self.second_fft_layer=SecondFFTLinearLayer(input_size=256)
+        self.second_fft_layer=SecondFFTLinearLayer(input_size=256,use_fft_weights=use_fft_weights)
 
     
     def forward(self, x):
