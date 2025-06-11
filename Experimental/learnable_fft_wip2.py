@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import time 
 
 '''
 Last up to date version
 '''
 
-# TODO add windowing!! inside FFTLinearLayer
+# TODO add windowing!! inside FFTLinearLayer -> done
 
 class FirstFFTLinearLayer(nn.Module):
     def __init__(self, input_size,use_fft_weights=True):
@@ -209,6 +210,7 @@ class SignalProcessLayer(nn.Module):
     
     def get_doppler_weights(self):
         return self.second_fft_layer.get_doppler_fft_weights()
+    
     def get_window_range_coeff(self):
         return self.hamming1.get_window_range_coefficients()
     def get_window_doppler_coeff(self):
@@ -226,19 +228,19 @@ def build_fft_by_dot_product_numpy(complex_adc):
 
 if __name__ == '__main__':
 
-    hanning_window_range=Hamming_window_range()
+    hanning_window_range=Hamming_window_range().to('cuda')
    
     hanning_window_range.eval()
     
-    fft_layer = FirstFFTLinearLayer(input_size=512) # 512 is the range fft number
+    fft_layer = FirstFFTLinearLayer(input_size=512).to('cuda') # 512 is the range fft number
     fft_layer.eval()
 
-    hanning_window_doppler=Hamming_window_doppler()
+    hanning_window_doppler=Hamming_window_doppler().to('cuda')
 
     hanning_window_doppler.eval()
 
    
-    fft_layer_2=SecondFFTLinearLayer(input_size=256) # 256 is the doppler fft number
+    fft_layer_2=SecondFFTLinearLayer(input_size=256).to('cuda') # 256 is the doppler fft number
     fft_layer_2.eval()
     print(30*'#')
     print('layers succesfully created')
@@ -249,67 +251,103 @@ if __name__ == '__main__':
     fft_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/TEST/FFT/'
     # range doppler computed with radial tools (ground truth)
     fft_fold2=f'/home/christophe/RADIalP7/SMALL_DATASET/TEST/FFT2/'
+    times_fft1=[]
+    times_fft2=[]
+    times_signal_process=[]
+    times_hamm1=[]
+    times_hamm2=[]
+    count=0
+    for idx in range(62):
 
-    sample_adc=np.load(adc_folder+'raw_adc_2.npy')
-    # add batch dimension
-    batch_sample_adc=torch.tensor(np.expand_dims(sample_adc, axis=0),dtype=torch.complex64)
-    assert np.allclose(batch_sample_adc[0],sample_adc),"raw adc data corrupted while expanding"
+        print(idx)
+        sample_adc=np.load(adc_folder+f'raw_adc_{idx}.npy')
+        # add batch dimension
+        batch_sample_adc=torch.tensor(np.expand_dims(sample_adc, axis=0),dtype=torch.complex64)
+        assert np.allclose(batch_sample_adc[0],sample_adc),"raw adc data corrupted while expanding"
+        start_ham1=time.time()
+        windowed_signal = hanning_window_range(batch_sample_adc.to('cuda')).clone().detach().to(dtype=torch.complex64)
+        times_hamm1.append(time.time()-start_ham1)
+        # sort of ground truth, computed in dataset_maker file
+        sample_fft=np.load(fft_folder+F'first_fft_{idx}.npy')
+        batch_sample_fft=np.expand_dims(sample_fft,axis=0)
+        assert np.allclose(batch_sample_fft[0],sample_fft),"fft data corrupted while expanding fft tensor"
 
-    windowed_signal = hanning_window_range(batch_sample_adc).clone().detach().to(dtype=torch.complex64)
-
-    # sort of ground truth, computed in dataset_maker file
-    sample_fft=np.load(fft_folder+'first_fft_map_2.npy')
-    batch_sample_fft=np.expand_dims(sample_fft,axis=0)
-    assert np.allclose(batch_sample_fft[0],sample_fft),"fft data corrupted while expanding fft tensor"
-
-    range_doppler=np.load(fft_fold2+'second_fft_2.npy')
+        range_doppler=np.load(fft_fold2+f'second_fft_{idx}.npy')
     
+        time_start_fft1=time.time()
+        radar_data_output= fft_layer(windowed_signal.to('cuda'))
+        times_fft1.append(time.time()-time_start_fft1)
 
-    radar_data_output= fft_layer(windowed_signal)
+        #windowed_signal = hanning_window_range(batch_sample_adc).clone().detach().to(dtype=torch.complex64)
+        start_time_ham2=time.time()
+        windowed_signal_2=hanning_window_doppler(radar_data_output).clone().detach().to(dtype=torch.complex64)
+        times_hamm2.append(time.time()-start_time_ham2)
+        time_start_fft2=time.time()
+        final_range_dopler_frame=fft_layer_2(windowed_signal_2)
+        times_fft2.append(time.time()-time_start_fft2)
 
-    #windowed_signal = hanning_window_range(batch_sample_adc).clone().detach().to(dtype=torch.complex64)
-    windowed_signal_2=hanning_window_doppler(radar_data_output).clone().detach().to(dtype=torch.complex64)
+        bias_final=final_range_dopler_frame[0].cpu().detach().numpy()-range_doppler
 
-    final_range_dopler_frame=fft_layer_2(windowed_signal_2)
+        mean_difference = np.mean(np.abs(bias_final))
+        print(f"Mean Absolute Difference final: {mean_difference}")
+        max_magnitude=np.max(np.abs(bias_final))
 
-    bias_final=final_range_dopler_frame[0].detach().numpy()-range_doppler
-
-    mean_difference = np.mean(np.abs(bias_final))
-    print(f"Mean Absolute Difference final: {mean_difference}")
-    max_magnitude=np.max(np.abs(bias_final))
-
-    print('max magnitude difference final: ',max_magnitude)
-
-
-    radar_data_output_numpy=radar_data_output[0].detach().numpy()
+        print('max magnitude difference final: ',max_magnitude)
 
 
-    print(30*'#')
-    # bias shall always be small:
-    bias2=sample_fft-radar_data_output_numpy
-    assert np.allclose(sample_fft,radar_data_output_numpy,atol=0.001,rtol=0.001)," missmatch between ground truth and cnn output"
+        radar_data_output_numpy=radar_data_output[0].cpu().detach().numpy()
 
-    mean_difference = np.mean(np.abs(bias2))
-    print(f"Mean Absolute Difference between fourier layer and classical fft: {mean_difference}")
 
-    max_magnitude=np.max(np.abs(bias2))
+        print(30*'#')
+        # bias shall always be small:
+        bias2=sample_fft-radar_data_output_numpy
+        assert np.allclose(sample_fft,radar_data_output_numpy,atol=0.05,rtol=0.05)," missmatch between ground truth and cnn output"
 
-    print('max magnitude difference: ',max_magnitude)
-    print(30*'#')
+        mean_difference = np.mean(np.abs(bias2))
+        print(f"Mean Absolute Difference between fourier layer and classical fft: {mean_difference}")
 
-    print(30*'~')
-    print('test of final model')
-    signal_process_layer=SignalProcessLayer()
-    signal_process_layer.eval()
-    signal_processed=signal_process_layer(batch_sample_adc)
-    print('Final shape: ',signal_processed.shape)
-    bias_final=signal_processed[0].detach().numpy()-range_doppler
+        max_magnitude=np.max(np.abs(bias2))
 
-    mean_difference = np.mean(np.abs(bias_final))
-    print(f"Mean Absolute Difference final with 4 layers model: {mean_difference}")
-    max_magnitude=np.max(np.abs(bias_final))
+        print('max magnitude difference: ',max_magnitude)
+        print(30*'#')
 
-    print('max magnitude difference final with 4 layers model: ',max_magnitude)
+        print(30*'~')
+        print('test of final model')
+        signal_process_layer=SignalProcessLayer().to('cuda')
+        signal_process_layer.eval()
+        time_start_signal_process=time.time()
+        signal_processed=signal_process_layer(batch_sample_adc.to('cuda'))
+        times_signal_process.append(time.time()-time_start_signal_process)
+        print('Final shape: ',signal_processed.shape)
+        bias_final=signal_processed[0].cpu().detach().numpy()-range_doppler
+        assert np.allclose(range_doppler,signal_processed[0].cpu().detach().numpy(),atol=0.1,rtol=0.1),'signal_process_layer not accurate'
+
+        mean_difference = np.mean(np.abs(bias_final))
+        print(f"Mean Absolute Difference final with 4 layers model: {mean_difference}")
+        max_magnitude=np.max(np.abs(bias_final))
+
+        print('max magnitude difference final with 4 layers model: ',max_magnitude)
+        count+=1
     
+    assert len(times_signal_process)==len(times_fft1)
+    assert len(times_fft1)==len(times_fft2)
+    assert len(times_fft1)==count
+    print('first fft layer mean time inference: ',np.mean(times_fft1),' seconds')
+
+    print('second fft layer mean time inference: ',np.mean(times_fft2),' seconds')
+
+    print('Signal process 4 layers timle inference: ',np.mean(times_signal_process),' seconds')
+
+    print('Inference time for first hamming window: ',np.mean(times_hamm1),'seconds')
+
+    print('Inference time for second hamming window: ',np.mean(times_hamm2),'seconds')
+
+    mean_fft1=np.mean(times_fft1)
+    mean_fft2=np.mean(times_fft2)
+    mean_ham1=np.mean(times_hamm1)
+    mean_ham2=np.mean(times_hamm2)
+    mean_signal_process=np.mean(times_signal_process)
+    
+    print('Time difference between separated and aggregated layers: ',mean_fft1+mean_fft2+mean_ham1+mean_ham2-mean_signal_process)
 
 

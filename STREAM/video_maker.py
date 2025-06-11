@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import imageio
 import shutil
+from PIL import Image
 
 def get_sorted_npy_paths(folder_path):
     # Match pattern like: second_fft_91.npy
@@ -23,6 +24,26 @@ def get_sorted_npy_paths(folder_path):
     # Sort by the number and return the paths
     npy_files.sort(key=lambda x: x[0])
     return [path for _, path in npy_files]
+
+def create_gif_from_pngs(folder_path, output_path, duration=500):
+    # Get all the PNG files from the folder
+    png_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
+    png_files.sort()  # Ensure the files are in the correct order
+
+    # Open each image and append it to the images list
+    images = [Image.open(os.path.join(folder_path, png_file)) for png_file in png_files]
+
+    # Save the images as a GIF
+    images[0].save(
+        output_path,
+        save_all=True,
+        append_images=images[1:],
+        duration=duration,  # Duration between frames in milliseconds
+        loop=0  # Loop indefinitely
+    )
+
+# Example usage
+
 
 range_doppler_file_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/VIDEO/FFT2'
 
@@ -44,7 +65,7 @@ antenna_id = 7 # The antenna ID you want to visualize
 all_range_doppler_data = []
 for rd_file in rd_files:
     range_doppler = np.load(rd_file)
-    sample_rad_doppler = np.abs(range_doppler[:, :, antenna_id])
+    sample_rad_doppler = np.angle(range_doppler[:, :, antenna_id])
     
     all_range_doppler_data.append(sample_rad_doppler)
 
@@ -57,9 +78,10 @@ print(f"Generating {len(rd_files)} heatmap frames...")
 
 for i, rd_file in enumerate(rd_files):
     range_doppler = np.load(rd_file)
-    sample_rad_doppler = np.abs(range_doppler[:, :, antenna_id])
+    sample_rad_doppler = np.angle(range_doppler[:, :, antenna_id])
 
-    fig, ax = plt.subplots(figsize=(8, 6)) # Adjust figure size as needed
+    fig, ax = plt.subplots(figsize=(15, 6)) # Adjust figure size as needed
+    plt.subplots_adjust(right=1.5)
 
     # Create the heatmap
     # Using imshow for 2D array heatmaps
@@ -67,7 +89,7 @@ for i, rd_file in enumerate(rd_files):
     cax = ax.imshow(sample_rad_doppler, cmap='viridis', aspect='auto',
                     vmin=global_min_val, vmax=global_max_val)
 
-    ax.set_title(f'Range-Doppler Heatmap - Frame {i+1}')
+    ax.set_title(f'Range-Doppler Phase Heatmap -Antenna: {antenna_id} -Frame {i+1}')
     ax.set_xlabel('Doppler Bins')
     ax.set_ylabel('Range Bins')
 
@@ -77,28 +99,32 @@ for i, rd_file in enumerate(rd_files):
 
     # Save the plot as an image
     frame_filename = os.path.join(temp_frames_folder, f'heatmap_frame_{i:04d}.png')
-    plt.savefig(frame_filename, bbox_inches='tight', dpi=100) # dpi can be adjusted for quality
+    plt.savefig(frame_filename, bbox_inches='tight', dpi=150) # dpi can be adjusted for quality
     plt.close(fig) # Close the figure to free up memory
 
 print("Heatmap frames generated.")
 
-frame_files = [os.path.join(temp_frames_folder, f) for f in os.listdir(temp_frames_folder) if f.startswith('heatmap_frame_') and f.endswith('.png')]
-frame_files.sort() # Ensure correct order
+folder_path = 'temp_heatmap_frames'
+output_path = 'output_range_dopller.gif'
+create_gif_from_pngs(folder_path, output_path)
 
-if not frame_files:
-    print("No frames found to create video. Exiting.")
-else:
-    print(f"Creating video from {len(frame_files)} frames using imageio...")
-    with imageio.get_writer(output_video_path, mode='I', fps=10) as writer: # Adjust fps as needed
-        for filename in frame_files:
-            image = imageio.imread(filename)
-            writer.append_data(image)
-    print(f"Video saved to {output_video_path}")
+# frame_files = [os.path.join(temp_frames_folder, f) for f in os.listdir(temp_frames_folder) if f.startswith('heatmap_frame_') and f.endswith('.png')]
+# frame_files.sort() # Ensure correct order
 
-    # Clean up temporary frames (optional)
+# if not frame_files:
+#     print("No frames found to create video. Exiting.")
+# else:
+#     print(f"Creating video from {len(frame_files)} frames using imageio...")
+#     with imageio.get_writer(output_video_path, mode='I', fps=10) as writer: # Adjust fps as needed
+#         for filename in frame_files:
+#             image = imageio.imread(filename)
+#             writer.append_data(image)
+#     print(f"Video saved to {output_video_path}")
+
+#     # Clean up temporary frames (optional)
     
-    shutil.rmtree(temp_frames_folder)
-    print(f"Temporary frames folder '{temp_frames_folder}' removed.")
+#     shutil.rmtree(temp_frames_folder)
+#     print(f"Temporary frames folder '{temp_frames_folder}' removed.")
 
 
 
