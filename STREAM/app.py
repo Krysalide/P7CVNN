@@ -2,17 +2,31 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import base64
+from ultralytics import YOLO
 
-st.image(image='/home/christophe/ComplexNet/STREAM/auto_radar.jpg',width=400)
-st.write("---")
 st.title('RADAR APPLICATION')
 
-# file = open("output_range_dopller.gif", 'rb')
-# contents = file.read()
-# data_url = base64.b64encode(contents).decode('utf-8-sig')
-# file.close()
-# st.markdown(f'<img src="data:image/gif;base64,{data_url}>',unsafe_allow_html = True)
 st.write("---")
+
+st.write("---")
+st.image(image='/home/christophe/ComplexNet/STREAM/auto_radar.jpg',width=400)
+st.write("---")
+
+
+video_path = "/home/christophe/ComplexNet/STREAM/intro.mp4"
+video_file = open(video_path, 'rb')
+video_bytes = video_file.read()
+video_base64 = base64.b64encode(video_bytes).decode()
+
+components.html(f"""
+<video autoplay loop muted playsinline width="640" height="480">
+  <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+""", height=500)
+
+st.write("---")
+
 
 # gif_path = "output_range_dopller.gif"
 
@@ -46,22 +60,7 @@ try:
 except FileNotFoundError:
     st.warning("Please place a GIF file named 'my_gif.gif' in the same directory as your script for the local GIF example to work.")
 
-st.write("---")
 
-
-video_path = "/home/christophe/ComplexNet/STREAM/intro.mp4"
-video_file = open(video_path, 'rb')
-video_bytes = video_file.read()
-video_base64 = base64.b64encode(video_bytes).decode()
-
-components.html(f"""
-<video autoplay loop muted playsinline width="640" height="480">
-  <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
-""", height=500)
-
-st.write("---")
 
 
 

@@ -216,7 +216,7 @@ class SignalProcessLayer(nn.Module):
     def get_window_doppler_coeff(self):
         return self.hamming2.get_window_doppler_coefficients()
 
-# does not contain windowing so useless in that form
+# does not contain windowing so useless 
 def build_fft_by_dot_product_numpy(complex_adc):
     signal_windowed = complex_adc # Assuming range_fft_coef is all ones
     N = signal_windowed.shape[0] # FFT along the first dimension
@@ -336,7 +336,7 @@ if __name__ == '__main__':
 
     print('second fft layer mean time inference: ',np.mean(times_fft2),' seconds')
 
-    print('Signal process 4 layers timle inference: ',np.mean(times_signal_process),' seconds')
+    print('Signal process 4 layers time inference: ',np.mean(times_signal_process),' seconds')
 
     print('Inference time for first hamming window: ',np.mean(times_hamm1),'seconds')
 
@@ -347,7 +347,27 @@ if __name__ == '__main__':
     mean_ham1=np.mean(times_hamm1)
     mean_ham2=np.mean(times_hamm2)
     mean_signal_process=np.mean(times_signal_process)
-    
+    time_diff=mean_fft1+mean_fft2+mean_ham1+mean_ham2-mean_signal_process
     print('Time difference between separated and aggregated layers: ',mean_fft1+mean_fft2+mean_ham1+mean_ham2-mean_signal_process)
+    
+    
+#     markdown_content = f"""# Inference Time Report
 
+
+
+# This report summarizes the mean inference times (in seconds) for different signal processing steps:
+# - **Number of frames used to compute the time statistics**: `{count}` 
+# - **First FFT layer mean inference time**: `{mean_fft1:.6f}` seconds  
+# - **Second FFT layer mean inference time**: `{mean_fft2:.6f}` seconds  
+# - **Signal process (4 layers) mean inference time**: `{mean_signal_process:.6f}` seconds  
+# - **First Hamming window inference time**: `{mean_ham1:.6f}` seconds  
+# - **Second Hamming window inference time**: `{mean_ham2:.6f}` seconds 
+# - **Gathering of layers improves speed by**: `{time_diff:.6f}` seconds 
+
+
+
+# """
+
+# with open("inference_report.md", "w") as f:
+#     f.write(markdown_content)
 

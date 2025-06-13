@@ -147,8 +147,10 @@ def plot_hanning_window(tensor,file_name,show_plot,title, cmap="viridis"):
     if show_plot:
         plt.show()
     else:
-        plt.savefig('/home/christophe/ComplexNet/plots/'+file_name)
+        save_path='/home/christophe/ComplexNet/plots/'+file_name
+        plt.savefig(save_path)
         plt.close()
+        return save_path
 
 
 
@@ -157,12 +159,13 @@ print(f"Number of CPUs: {num_cpus}")
 
 gpu_ok,device=check_gpu_availability()
 
-#device='cuda' ???
+
 if not gpu_ok:
     sys.exit('No GPU available, will exit')
     
 in_channels = 16  # shall remain fixed equal to the number of antennas
 out_channels = 16  # same as in_channels
+use_fft_weights=False # if true weights will be set with dft matrix weights
 resume_training=False
 
 if resume_training:
@@ -170,9 +173,9 @@ if resume_training:
     raise NotImplementedError
 else:
     print('Will start training from scratch')
-    model=SignalProcessLayer(use_fft_weights=True).to(device=device)
+    model=SignalProcessLayer(use_fft_weights=use_fft_weights).to(device=device)
 
-save_model=True
+save_model=False
 if save_model:
     print('Model will be saved after training')
 else:
@@ -219,7 +222,7 @@ if plot_hamming:
 
 
 model.train()
-learning_rate = 0.5
+learning_rate = 0.01
 
 batch_size = 2
 
@@ -236,7 +239,7 @@ name_optimizer=optimizer.__class__.__name__
 print('optimizer for that run: ',name_optimizer)
 
 # useless ? 
-scheduler=StepLR(step_size=20,gamma=0.95,optimizer=optimizer)
+scheduler=StepLR(step_size=50,gamma=0.95,optimizer=optimizer)
 
 
 name_scheduler=scheduler.__class__.__name__
@@ -280,14 +283,14 @@ if not full_data:
     data_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/TEST'
     assert os.path.exists(data_folder), 'data not found'
     element_number=60
-    assert element_number<61, f"number of element is limited to 60"
+    assert element_number<61, f"number of element is limited to 60 for now"
     indices = list(range(element_number)) # specify number of elements
 
     dataset = RadarFFTDataset(data_folder, indices)
     print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples)")
 
 else:
-    raise NotImplementedError('recursive dataset not yet built for one fft')
+    raise NotImplementedError('recursive dataset not yet built')
     data_folder='/media/christophe/backup/DATARADIAL'
     dataset=RadarDatasetV2(data_folder,recursive=True)
     print(f"Dataset length: {len(dataset)}, gathered all data available from folder: {data_folder} ")
@@ -297,11 +300,12 @@ else:
 train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=4,train_ratio=0.8,val_ratio=0.19,test_ratio=0.01)
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
 
-mlflow.start_run()
+mlflow.start_run(run_name="random_fft_initialisation_400_epochs_BLR")
 
 # Log parameters
 mlflow.log_param("type_of_data",'ADC2FFT')
 mlflow.log_param("model_type", model.name)
+mlflow.log_param('fft_weights_deterministic',use_fft_weights)
 mlflow.log_param("learning_rate", learning_rate)
 mlflow.log_param("optimizer", name_optimizer)
 mlflow.log_param("scheduler", name_scheduler)
@@ -320,12 +324,12 @@ val_mse_history = []
 val_phase_history = []
 val_loss_history=[]
 print('------Entering Network Training------------')
-epochs = 100
+epochs = 400
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
 start_time = time.time()
-eval_rate=20
+eval_rate=10
 for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
@@ -398,8 +402,8 @@ if save_model:
 else:
     print('------MODEL NOT SAVED------------')
 
-visualize=True
-if visualize:
+visualize_train_effects=True
+if visualize_train_effects:
     model.eval()
     range_fft_weights=model.get_range_weights()
     plot_tensor_heatmap(tensor=range_fft_weights,title="range_fft_layer_weights_after_train",show_plot=False,
@@ -407,11 +411,12 @@ if visualize:
     doppler_fft_weights=model.get_doppler_weights()
     plot_tensor_heatmap(tensor=doppler_fft_weights,title="doppler_fft_layer_weights_after_train",show_plot=False,
                         file_name='doppler_fft_weights_after_train.png')
-    if plot_hamming:
-        hanning_window_range_coeff=model.get_window_range_coeff()
-        plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning_post_train.png'
-                    ,title='hanning window range post train',show_plot=False)
-        plot_hanning_3d_html(tensor=hanning_window_doppler_coeff,file_name='hanning_doppler_post_train3D.html',title='hamming window post train')
+    hanning_window_range_coeff=model.get_window_range_coeff()
+    plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning_post_train.png'
+                    ,title='hanning window range after train',show_plot=False)
+    hanning_window_doppler_coeff=model.get_window_doppler_coeff()
+    plot_hanning_window(tensor=hanning_window_doppler_coeff,file_name='hanning_doppler_post_train.png',
+                    show_plot=False,title='doppler hanning window after train')
     
 
     
