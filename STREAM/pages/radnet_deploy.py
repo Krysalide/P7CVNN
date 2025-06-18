@@ -4,12 +4,14 @@ import json
 import argparse
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.container import Sequential
 from torchvision.transforms.transforms import Sequence
+import streamlit
 NbTxAntenna = 12
 NbRxAntenna = 16
 NbVirtualAntenna = NbTxAntenna * NbRxAntenna
@@ -276,7 +278,8 @@ class FFTRadNet(nn.Module):
     def forward(self,x):
                        
         out = {'Detection':[],'Segmentation':[]}
-        
+
+        x = x.permute(0, 3, 1, 2)
         features= self.FPN(x)
         RA = self.RA_decoder(features)
 
@@ -289,17 +292,29 @@ class FFTRadNet(nn.Module):
         
         return out
 
-#from FFTRadNet import FFTRadNet
-#from dataset import RADIal
-#from encoder import ra_encoder
-import cv2
-#from util import DisplayHMI
+
+
+def split_real_imag(x: torch.Tensor) -> torch.Tensor:
+    """
+    Splits a complex tensor into real and imaginary parts along the last dimension.
+
+    
+    """
+    if not torch.is_complex(x):
+        raise ValueError("Input tensor must be complex.")
+
+    real = x.real 
+    imag = x.imag 
+
+    # Concatenate along the last dimension
+    out = torch.cat([real, imag], dim=-1) 
+    return out
 
 def main(config, checkpoint_filename,difficult):
 
     # set device
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    print('Device: ',device)
+    print('Device available: ',device)
 
     net = FFTRadNet(blocks = config['model']['backbone_block'],
                         mimo_layer  = config['model']['MIMO_output'],
@@ -344,29 +359,40 @@ def main(config, checkpoint_filename,difficult):
         
     batch_sample_adc=torch.tensor(np.expand_dims(sample_adc, axis=0),dtype=torch.complex64)
     signal_processed=signal_process_layer(batch_sample_adc.to('cuda'))
-    prediction=net(signal_processed)
+
+    signal_processed=split_real_imag(signal_processed)
+    with torch.set_grad_enabled(False):
+            prediction=net(signal_processed)
+
+    detection_output=prediction['Detection']
+    
+    segmentation_output=prediction['Segmentation']
+
+    spatial_map = segmentation_output.squeeze().cpu().detach().numpy()  # shape: (256, 224)
+
+    # Plot using imshow
+    plt.figure(figsize=(6, 6))
+    plt.imshow(spatial_map, cmap='gray') 
+    plt.colorbar(label='Intensity')
+    plt.title("Segmentation FFT output")
+    plt.xlabel("Width")
+    plt.ylabel("Height")
+    plt.show()
+
+    x = detection_output.squeeze(0)  # Shape: [3, 128, 224]
+    
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))  # 1 row, 3 columns
+
+    for i in range(3):
+        channel = x[i].cpu().detach().numpy()  # Shape: [128, 224]
+        axes[i].imshow(channel, cmap='viridis')  # or 'gray', 'plasma', etc.
+        axes[i].set_title(f"Detection Channel {i}")
+        axes[i].axis('off')
+
+    plt.tight_layout()
+    plt.show()
 
 
-    sys.exit('model loaded succsfully, ')
-
-
-    # for data in dataset:
-    #     # data is composed of [radar_FFT, segmap,out_label,box_labels,image]
-    #     inputs = torch.tensor(data[0]).permute(2,0,1).to('cuda').float().unsqueeze(0)
-
-    #     with torch.set_grad_enabled(False):
-    #         outputs = net(inputs)
-
-    #     hmi = DisplayHMI(data[4], data[0],outputs,enc)
-
-    #     cv2.imshow('FFTRadNet',hmi)
-        
-    #     # Press Q on keyboard to  exit
-    #     if cv2.waitKey(25) & 0xFF == ord('q'):
-    #         break
-
-    # cv2.destroyAllWindows()
-        
 
 if __name__=='__main__':
     # PARSE THE ARGS

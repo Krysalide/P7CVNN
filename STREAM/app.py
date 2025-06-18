@@ -2,7 +2,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import base64
-from ultralytics import YOLO
+
 
 st.title('RADAR APPLICATION')
 
