@@ -29,8 +29,10 @@ from ComplexUnet import hybrid_loss
 # wip to be tested
 from loss_function_relative import complex_relative_mse_loss_v1,complex_relative_mse_loss_v2
 from loss_function_relative import complex_relative_mse_loss_v3
+from loss_function_relative import complex_relative_mse_phase_loss
 
 from Experimental.learnable_fft_wip2 import SignalProcessLayer
+from Experimental.learnable_fft_wip2 import SignalProcessLayerV2
 
 from ComplexUnet import visualize_complex_norm,visualize_complex_plane,visualize_complex_weights
 
@@ -124,6 +126,7 @@ def plot_tensor_heatmap(tensor,file_name,show_plot, title="Tensor Heatmap", cmap
         assert file_name, 'please specify name of file to be saved'
         plt.savefig('/home/christophe/ComplexNet/plots/'+file_name)
         plt.close()
+        return '/home/christophe/ComplexNet/plots/'+file_name
 
 def plot_hanning_window(tensor,file_name,show_plot,title, cmap="viridis"):
     """
@@ -166,16 +169,22 @@ if not gpu_ok:
 in_channels = 16  # shall remain fixed equal to the number of antennas
 out_channels = 16  # same as in_channels
 use_fft_weights=False # if true weights will be set with dft matrix weights
-resume_training=False
+resume_training=True
 
 if resume_training:
-    
-    raise NotImplementedError
+    print('last trained model will be reloaded')
+    model=SignalProcessLayerV2(use_first_fft_weights=True,use_second_fft_weights=False).to(device=device)
+    #load_path='/home/christophe/ComplexNet/FFT/signal_process_layer.pth' # v1 signalprocesslayer
+    load_path='/home/christophe/ComplexNet/FFT/signal_process_layerV2.pth'
+    loaded_state_dict = torch.load(load_path)
+    model.load_state_dict(loaded_state_dict)
+
+
 else:
     print('Will start training from scratch')
-    model=SignalProcessLayer(use_fft_weights=use_fft_weights).to(device=device)
-
-save_model=False
+    #model=SignalProcessLayer(use_fft_weights=use_fft_weights).to(device=device)
+    model=SignalProcessLayerV2(use_first_fft_weights=True,use_second_fft_weights=False).to(device=device)
+save_model=True
 if save_model:
     print('Model will be saved after training')
 else:
@@ -184,19 +193,19 @@ else:
 print('model: ',model.name,' initiated')
 
 # TODO check if code ok and test with False
-for param in model.hamming1.parameters():
-    param.requires_grad = True
-for param in model.hamming2.parameters():
-    param.requires_grad = True
+# for param in model.hamming1.parameters():
+#     param.requires_grad = True
+# for param in model.hamming2.parameters():
+#     param.requires_grad = True
 
 
-for param in model.first_fft_layer.parameters():
-    param.requires_grad = True
-for param in model.second_fft_layer.parameters():
-    param.requires_grad = True
+# for param in model.first_fft_layer.parameters():
+#     param.requires_grad = True
+# for param in model.second_fft_layer.parameters():
+#     param.requires_grad = True
 
-for name, param in model.named_parameters():
-    print(f"{name}: requires_grad = {param.requires_grad}")
+# for name, param in model.named_parameters():
+#     print(f"{name}: requires_grad = {param.requires_grad}")
 
 
 model.eval()
@@ -222,7 +231,7 @@ if plot_hamming:
 
 
 model.train()
-learning_rate = 0.01
+learning_rate = 0.001
 
 batch_size = 2
 
@@ -236,10 +245,10 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 name_optimizer=optimizer.__class__.__name__
 
 
-print('optimizer for that run: ',name_optimizer)
+print('optimizer used to train: ',name_optimizer)
 
 # useless ? 
-scheduler=StepLR(step_size=50,gamma=0.95,optimizer=optimizer)
+scheduler=StepLR(step_size=400,gamma=1.1,optimizer=optimizer)
 
 
 name_scheduler=scheduler.__class__.__name__
@@ -254,7 +263,7 @@ class LossType(Enum):
     RELATIVE_LOSS2="relative_loss2"
     RELATIVE_LOSS3="relative_loss3"
  
-type_loss=LossType.RELATIVE_LOSS3
+type_loss=LossType.RELATIVE_LOSS2
 
 if type_loss==LossType.MSE_LOSS:
     loss_function = complex_mse_loss
@@ -266,7 +275,7 @@ elif type_loss==LossType.HYBRID_LOSS:
 elif type_loss==LossType.RELATIVE_LOSS1:
     loss_function=complex_relative_mse_loss_v1
 elif type_loss==LossType.RELATIVE_LOSS2:
-    loss_function=complex_relative_mse_loss_v2
+    loss_function=complex_relative_mse_phase_loss
 elif type_loss==LossType.RELATIVE_LOSS3:
     loss_function=complex_relative_mse_loss_v3
 
@@ -277,13 +286,14 @@ print('Loss type used to train: ',type_loss.value)
 
 
 print('Entering data loading...')
+ratio_test=1/3 # here we take only one sample to train?? 
 full_data=False
 if not full_data:
     
-    data_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/TEST'
+    data_folder='/home/christophe/RADIalP7/SMALL_DATASET/TEST'
     assert os.path.exists(data_folder), 'data not found'
-    element_number=60
-    assert element_number<61, f"number of element is limited to 60 for now"
+    element_number=3
+    assert element_number<61, "number of element is limited to 60 for now"
     indices = list(range(element_number)) # specify number of elements
 
     dataset = RadarFFTDataset(data_folder, indices)
@@ -297,7 +307,7 @@ else:
 
 
 # for now all data is splited in train and val, no data for test
-train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=4,train_ratio=0.8,val_ratio=0.19,test_ratio=0.01)
+train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=1,train_ratio=ratio_test,val_ratio=ratio_test,test_ratio=ratio_test)
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
 
 mlflow.start_run(run_name="random_fft_initialisation_400_epochs_BLR")
@@ -324,7 +334,7 @@ val_mse_history = []
 val_phase_history = []
 val_loss_history=[]
 print('------Entering Network Training------------')
-epochs = 400
+epochs = 2000
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
@@ -395,7 +405,7 @@ for epoch in range(epochs):
 
 
 print(f"Total time per epoch: {(time.time()-start_time)/epochs:.2f} seconds")
-save_path='/home/christophe/ComplexNet/FFT/signal_process_layer.pth'
+save_path='/home/christophe/ComplexNet/FFT/signal_process_layerV2.pth'
 if save_model:
     torch.save(model.state_dict(), save_path)
     print('------MODEL SAVED------------')
@@ -406,10 +416,10 @@ visualize_train_effects=True
 if visualize_train_effects:
     model.eval()
     range_fft_weights=model.get_range_weights()
-    plot_tensor_heatmap(tensor=range_fft_weights,title="range_fft_layer_weights_after_train",show_plot=False,
+    post_train_r_fft_path=plot_tensor_heatmap(tensor=range_fft_weights,title="range_fft_layer_weights_after_train",show_plot=False,
                         file_name='range_fft_after_train.png')
     doppler_fft_weights=model.get_doppler_weights()
-    plot_tensor_heatmap(tensor=doppler_fft_weights,title="doppler_fft_layer_weights_after_train",show_plot=False,
+    post_train_dopller_fft_path=plot_tensor_heatmap(tensor=doppler_fft_weights,title="doppler_fft_layer_weights_after_train",show_plot=False,
                         file_name='doppler_fft_weights_after_train.png')
     hanning_window_range_coeff=model.get_window_range_coeff()
     plot_hanning_window(tensor=hanning_window_range_coeff,file_name='range_hanning_post_train.png'
@@ -466,6 +476,8 @@ plt.close()
 
 mlflow.log_artifact(plot_path)
 mlflow.log_artifact(plot_path2)
+mlflow.log_artifact(post_train_r_fft_path)
+mlflow.log_artifact(post_train_dopller_fft_path)
 
 # if model_type==NetType.ONE_LAYER:
 

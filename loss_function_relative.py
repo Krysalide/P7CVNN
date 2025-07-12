@@ -73,6 +73,95 @@ def complex_relative_mse_loss_v3(output, target):
 
     return relative_loss
 
+def complex_relative_mse_phase_loss(output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """
+    Relative Complex MSE Loss with Phase Error (Mean Relative Loss * Mean Phase Error).
+
+    This function calculates:
+    1.  The mean of element-wise relative squared magnitude errors:
+        (|output_i - target_i|^2 / |target_i|^2) for each complex element i.
+    2.  The mean of element-wise squared phase differences between output and target,
+        calculated only for elements where the target's magnitude is non-zero.
+        The phase difference is wrapped to (-pi, pi] before squaring.
+    3.  The final loss is the product of the magnitude-based relative loss and the
+        mean phase error.
+
+    Args:
+        output (torch.Tensor): The predicted complex tensor.
+        target (torch.Tensor): The ground truth complex tensor.
+
+    Returns:
+        torch.Tensor: A scalar tensor representing the combined loss.
+
+    Raises:
+        ValueError: If input tensors are not complex.
+    """
+    epsilon = 1e-8 # Small constant to prevent division by zero in magnitude calculation
+
+    # Ensure inputs are complex tensors
+    if not torch.is_complex(output) or not torch.is_complex(target):
+        raise ValueError("Input tensors must be complex.")
+    
+    # --- 1. Calculate Magnitude-based Relative MSE Loss ---
+
+    # Calculate the complex error: (output_i - target_i)
+    complex_error = output - target
+
+    # Calculate the squared magnitude of the complex error: |error_i|^2 = real_error^2 + imag_error^2
+    squared_complex_error_magnitude = (complex_error.real**2 + complex_error.imag**2)
+
+    # Calculate the squared magnitude of the target: |target_i|^2 = real_target^2 + imag_target^2
+    squared_target_magnitude = (target.real**2 + target.imag**2)
+
+    # Calculate element-wise relative squared error for magnitude: |error_i|^2 / |target_i|^2
+    # Add epsilon to the denominator to prevent division by zero for target_i close to zero.
+    elementwise_relative_squared_magnitude_error = squared_complex_error_magnitude / (squared_target_magnitude + epsilon)
+
+    # Take the mean over all elements to get the overall magnitude relative loss
+    magnitude_relative_loss = torch.mean(elementwise_relative_squared_magnitude_error)
+
+    # --- 2. Calculate Phase Error ---
+
+    # Create a mask to identify elements where target magnitude is effectively zero.
+    # We use a slightly larger threshold (e.g., epsilon * 10) for numerical robustness.
+    non_zero_magnitude_mask = squared_target_magnitude >= (epsilon * 10) 
+
+    # Handle the case where all target magnitudes are effectively zero.
+    # In this scenario, phase error is undefined/irrelevant, so we set its multiplier to 1.0.
+    if not torch.any(non_zero_magnitude_mask):
+        # If no elements have non-zero magnitude, the phase component of the loss
+        # should not pull the total loss to zero. A multiplier of 1.0 effectively
+        # makes the final loss equal to the magnitude_relative_loss.
+        mean_phase_error = torch.tensor(1.0, dtype=output.real.dtype, device=output.device)
+    else:
+        # Get the angle (phase) of output and target tensors in radians, in range (-pi, pi]
+        angle_output = torch.angle(output)
+        angle_target = torch.angle(target)
+
+        # Calculate the element-wise raw phase difference
+        raw_phase_difference = angle_output - angle_target
+
+        # Wrap the phase difference to the range (-pi, pi] to account for periodicity
+        # This ensures that a phase difference of 350 degrees is treated as -10 degrees,
+        # which is much smaller when squared.
+        wrapped_phase_difference = torch.atan2(torch.sin(raw_phase_difference), torch.cos(raw_phase_difference))
+
+        # Calculate the squared phase error for each element
+        elementwise_squared_phase_error = wrapped_phase_difference**2
+
+        # Apply the mask: only consider phase errors for elements where target magnitude is non-zero.
+        # This prevents NaN propagation from `torch.angle(0 + 0j)`.
+        valid_squared_phase_error = elementwise_squared_phase_error[non_zero_magnitude_mask]
+
+        # Take the mean of the valid squared phase errors
+        mean_phase_error = torch.mean(valid_squared_phase_error)
+
+    # --- 3. Combine the losses ---
+    # As requested, multiply the initial magnitude loss by the mean phase error.
+    final_loss = magnitude_relative_loss * mean_phase_error
+
+    return final_loss
+
 # For test!!!
 if __name__ == "__main__":
     #

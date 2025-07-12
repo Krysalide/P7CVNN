@@ -11,6 +11,7 @@ from ComplexUnet import complex_mse_loss,hybrid_loss
 from ComplexUnet import phase_loss
 from loss_function_relative import  complex_relative_mse_loss_v1,complex_relative_mse_loss_v2
 from loss_function_relative import complex_relative_mse_loss_v3
+from loss_function_relative import complex_relative_mse_phase_loss
 from ComplexUnet import ComplexUNet
 from ComplexUnet import SmallComplexUNet
 from ComplexUnet import TinyComplexUNet
@@ -47,7 +48,7 @@ if not gpu_ok:
     
 in_channels = 16  # shall remain fixed equal to the number of antennas
 out_channels = 16  # same as in_channels
-resume_training=False
+resume_training=True
 
 if resume_training:
     print('Resume training')
@@ -76,7 +77,7 @@ elif type_loss==LossType.PHASE_LOSS:
 elif type_loss==LossType.HYBRID_LOSS:
     loss_function = hybrid_loss
 elif type_loss==LossType.RELATIVE_LOSS:
-    loss_function=complex_relative_mse_loss_v1
+    loss_function=complex_relative_mse_phase_loss
 else:
     raise ValueError("Invalid loss type")
 
@@ -89,7 +90,7 @@ class NetType(Enum):
     ONE_LAYER="one_layer"
     
 #cardioid_model=True
-model_type=NetType.UNET
+model_type=NetType.SMALL_UNET
 
 if model_type==NetType.CARDIOID_UNET:
     raise NotImplementedError
@@ -125,7 +126,7 @@ elif model_type==NetType.SMALL_UNET:
     else:
         save_path='/home/christophe/ComplexNet/FFT/small_unet.pth'
         model=SmallComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
-    print('Type of model loaded',model.name)
+    
 
 elif model_type==NetType.FNO:
     if resume_training:
@@ -173,8 +174,9 @@ elif model_type==NetType.ONE_LAYER:
         
 else:
     raise ValueError("Invalid model type")
+
 print('Type of model loaded',model.name)
-learning_rate = 0.1 
+learning_rate = 0.05
 # step_size = 10
 # gamma = 1.0
 
@@ -187,7 +189,7 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 name_optimizer=optimizer.__class__.__name__
 
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', 
-                                                 factor=0.95, patience=5, 
+                                                 factor=0.95, patience=100, 
                                                  min_lr=1e-7,
                                                  threshold=100,threshold_mode='abs')
 
@@ -200,7 +202,7 @@ if not full_data:
     sequence = 'RECORD@2020-11-22_12.08.31'
     
     data_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/{sequence}'
-    indices = list(range(242)) # specify number of elements
+    indices = list(range(3)) # specify number of elements
 
     dataset = RadarFFTDataset(data_folder, indices)
     print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples from sequence: {sequence})")
@@ -211,9 +213,9 @@ else:
     dataset=RadarDatasetV2(data_folder,recursive=True)
     print(f"Dataset length: {len(dataset)}, gathered all data available from folder: {data_folder} ")
 
-
+ratio_test=1/3
 # for now all data is splited in train and val, no test date
-train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=4,train_ratio=0.8,val_ratio=0.19,test_ratio=0.01)
+train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=4,train_ratio=ratio_test,val_ratio=ratio_test,test_ratio=ratio_test)
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
 
 mlflow.start_run()
@@ -239,7 +241,7 @@ val_mse_history = []
 val_phase_history = []
 val_loss_history=[]
 print('------Entering Network Training------------')
-epochs = 50
+epochs = 1000
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
@@ -382,8 +384,6 @@ if model_type==NetType.ONE_LAYER:
 
 print('------End of Network Training------------')
 
-# 100 samples 36 seconds
-# 250 smaples 86 seconds
 
 
 

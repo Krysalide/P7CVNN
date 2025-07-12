@@ -14,31 +14,21 @@ import torch.nn.functional as F
 from torch.nn.modules.container import Sequential
 from torchvision.transforms.transforms import Sequence
 from shapely.geometry import Polygon
-#from encoder import ra_encoder
-#from util import DisplayHMI
 import streamlit as st # Import streamlit
 import polarTransform
 
-# --- Original Constants and Model Definitions (keep these as they are) ---
+# --- Original Constants As Found in Gitub Radial ---
 NbTxAntenna = 12
 NbRxAntenna = 16
 NbVirtualAntenna = NbTxAntenna * NbRxAntenna
 
-# Assuming Experimental.learnable_fft_wip2 exists and SignalProcessLayer is available
-# If this is not a separate file, you'll need to include its definition here.
+
 try:
     from Experimental.learnable_fft_wip2 import SignalProcessLayer
 except ImportError:
-    st.error("Error: Could not import SignalProcessLayer. Make sure 'Experimental/learnable_fft_wip2.py' is in your project path and contains SignalProcessLayer.")
-    # You might want to define a dummy class or handle this more gracefully for a robust app
-    class SignalProcessLayer(nn.Module):
-        def __init__(self, use_fft_weights=True):
-            super().__init__()
-            st.warning("Using a dummy SignalProcessLayer. Actual processing might fail.")
-        def forward(self, x):
-            # Placeholder for actual signal processing
-            return x.real + 0j # Return real part as complex for split_real_imag
-
+    st.error("Error: Could not import SignalProcessLayer.")
+    
+#### FFTRADNET IMPORT
 
 def conv3x3(in_planes, out_planes, stride=1, bias=False):
     """3x3 convolution with padding"""
@@ -302,6 +292,8 @@ class FFTRadNet(nn.Module):
             out['Segmentation'] = self.freespace(Y)
      
         return out
+    
+# note: not relevant for our model
 def interleave_real_imag(x: torch.Tensor) -> torch.Tensor:
     """
     Interleaves the real and imaginary parts of a complex tensor along the last dimension.
@@ -334,7 +326,7 @@ def split_real_imag(x: torch.Tensor) -> torch.Tensor:
     out = torch.cat([real, imag], dim=-1) 
     return out
 
-# --- Streamlit Application ---
+###### Streamlit Application ####
 
 # Use st.cache_resource to load the model and signal processing layer only once
 @st.cache_resource
@@ -345,6 +337,8 @@ def load_model(config_path, checkpoint_path):
 
     # Load configuration
     config = json.load(open(config_path))
+    # print('CONFIG:')
+    # print(config)
 
     # Initialize FFTRadNet model
     net = FFTRadNet(blocks = config['model']['backbone_block'],
@@ -353,16 +347,20 @@ def load_model(config_path, checkpoint_path):
                     regression_layer = 2, 
                     detection_head = config['model']['DetectionHead'], 
                     segmentation_head = config['model']['SegmentationHead'])
+    
     net.to(device)
-    st.write('FFTRadnet initiated.')
+    st.write('FFTRadnet initiated succesfully.')
 
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     old_state_dict = checkpoint['net_state_dict']
 
+
+    ## dirty patch 
     new_state_dict = OrderedDict()
     for k, v in old_state_dict.items():
         if k.startswith('backbone.'):
+            #print('debug backbone: ',k)
             k = k.replace('backbone.', 'FPN.')
         if k.startswith('RAmap_header.'):
             k = k.replace('RAmap_header.', 'RA_decoder.')
@@ -383,19 +381,31 @@ def load_model(config_path, checkpoint_path):
             st.error(f"Failed to load model even with strict=False: {inner_e}")
             return None, None # Indicate failure
 
-    net.eval() # Set model to evaluation mode
+    #net.eval() # Set model to evaluation mode
 
     # Initialize signal processing layer
     signal_process_layer = SignalProcessLayer(use_fft_weights=True).to(device)
+    #signal_process_layer.eval()
     
     return net, signal_process_layer, device
 
-def encoder_decode(map,threshold):
-    geometry={'ranges': [512, 896, 1], 'resolution': [0.201171875, 0.2], 'size': 3}
-    OUTPUT_DIM=(3, 128, 224)
-    statistics={'input_mean': [-0.0026244, -0.21335, 0.018789, -1.4427, -0.37618, 1.3594, -0.22987, 0.12244, 1.7359, -0.65345, 0.37976, 5.5521, 0.77462, -1.5589, -0.72473, 1.5182, -0.37189, -0.088332, -0.16194, ...], 'input_std': [20775.3809, 23085.5, 23017.6387, 14548.6357, 32133.5547, 28838.8047, 27195.8945, 33103.7148, 32181.5273, 35022.1797, 31259.1895, 36684.6133, 33552.9258, 25958.7539, 29532.623, 32646.8984, 20728.332, 23160.8828, 23069.0449, ...], 'reg_mean': [0.4048094369863972, 0.3997392847799934], 'reg_std': [0.6968599580482511, 0.6942950877813826]}
 
+# encoder taken from radial github, 
+# some values have been extracted with help of debugger
+def encoder_decode(map,threshold,config):
     
+    
+    dataset=config['dataset']
+    geometry=dataset['geometry']
+
+    statistics=dataset['statistics']
+    
+    OUTPUT_DIM=(3, 128, 224)
+
+    # geometry={'ranges': [512, 896, 1], 'resolution': [0.201171875, 0.2], 'size': 3}
+    # OUTPUT_DIM=(3, 128, 224)
+    # statistics={'input_mean': [-0.0026244, -0.21335, 0.018789, -1.4427, -0.37618, 1.3594, -0.22987, 0.12244, 1.7359, -0.65345, 0.37976, 5.5521, 0.77462, -1.5589, -0.72473, 1.5182, -0.37189, -0.088332, -0.16194, ...], 'input_std': [20775.3809, 23085.5, 23017.6387, 14548.6357, 32133.5547, 28838.8047, 27195.8945, 33103.7148, 32181.5273, 35022.1797, 31259.1895, 36684.6133, 33552.9258, 25958.7539, 29532.623, 32646.8984, 20728.332, 23160.8828, 23069.0449, ...], 'reg_mean': [0.4048094369863972, 0.3997392847799934], 'reg_std': [0.6968599580482511, 0.6942950877813826]}
+
     range_bins,angle_bins = np.where(map[0,:,:]>=threshold)
 
     coordinates = []
@@ -466,13 +476,14 @@ def perform_nms(valid_class_predictions, valid_box_predictions, nms_threshold):
             break
 
         # eliminate all detections which have IoU > threshold
+        #overlap_mask = np.where(ious > nms_threshold, True, False)
         overlap_mask = np.where(ious < nms_threshold, True, False)
         sorted_box_predictions = sorted_box_predictions[overlap_mask]
         sorted_class_predictions = sorted_class_predictions[overlap_mask]
 
     return sorted_class_predictions, sorted_box_predictions
 
-def process_predictions_FFT(batch_predictions, confidence_threshold=0.1, nms_threshold=0.05):
+def process_predictions_FFT(batch_predictions, confidence_threshold=0.2, nms_threshold=0.05):
 
     # process targets and perform NMS for each prediction in batch
     final_batch_predictions = None  # store final bounding box predictions
@@ -495,6 +506,7 @@ def process_predictions_FFT(batch_predictions, confidence_threshold=0.1, nms_thr
 
     return final_point_cloud_predictions
 
+### PARAMS FOR IMAGES
 camera_matrix = np.array([[1.84541929e+03, 0.00000000e+00, 8.55802458e+02],
                  [0.00000000e+00 , 1.78869210e+03 , 6.07342667e+02],[0.,0.,1]])
 dist_coeffs = np.array([2.51771602e-01,-1.32561698e+01,4.33607564e-03,-6.94637533e-03,5.95513933e+01])
@@ -502,6 +514,8 @@ rvecs = np.array([1.61803058, 0.03365624,-0.04003127])
 tvecs = np.array([0.09138029,1.38369885,1.43674736])
 ImageWidth = 1920
 ImageHeight = 1080
+
+
 def worldToImage(x,y,z):
     world_points = np.array([[x,y,z]],dtype = 'float32')
     rotation_matrix = cv2.Rodrigues(rvecs)[0]
@@ -513,29 +527,84 @@ def worldToImage(x,y,z):
     
     return u,v
 
-def process_predictions(model_outputs,input,image):
-    pred_obj = model_outputs['Detection'].detach().cpu().numpy().copy()[0]
-    out_seg = torch.sigmoid(model_outputs['Segmentation']).detach().cpu().numpy().copy()[0,0]
-    pred_obj = encoder_decode(pred_obj,0.05)
-    pred_obj = np.asarray(pred_obj)
-    if(len(pred_obj)>0):
-        pred_obj = process_predictions_FFT(pred_obj,confidence_threshold=0.2)
-    FFT = np.abs(input[...,:16]+input[...,16:]*1j).mean(axis=2)
-    PowerSpectrum = np.log10(FFT)
-    # rescale
-    PowerSpectrum = (PowerSpectrum -PowerSpectrum.min())/(PowerSpectrum.max()-PowerSpectrum.min())*255
-    PowerSpectrum = cv2.cvtColor(PowerSpectrum.astype('uint8'),cv2.COLOR_GRAY2BGR)
+# def process_predictions(model_outputs,input,image):
+#     pred_obj = model_outputs['Detection'].detach().cpu().numpy().copy()[0]
+#     out_seg = torch.sigmoid(model_outputs['Segmentation']).detach().cpu().numpy().copy()[0,0]
+#     pred_obj = encoder_decode(pred_obj,0.05)
+#     pred_obj = np.asarray(pred_obj)
+#     if(len(pred_obj)>0):
+#         # confidence_threshold=0.2 initialy
+#         pred_obj = process_predictions_FFT(pred_obj,confidence_threshold=0.2,nms_threshold=0.05)
+#     FFT = np.abs(input[...,:16]+input[...,16:]*1j).mean(axis=2)
+#     PowerSpectrum = np.log10(FFT)
+#     # rescale
+#     PowerSpectrum = (PowerSpectrum -PowerSpectrum.min())/(PowerSpectrum.max()-PowerSpectrum.min())*255
+#     PowerSpectrum=PowerSpectrum.numpy()
+#     # added 18 june
+#     PowerSpectrum=np.squeeze(PowerSpectrum)
+#     PowerSpectrum = cv2.cvtColor(PowerSpectrum.astype('uint8'),cv2.COLOR_GRAY2BGR)
 
+#     ## Image
+#     for box in pred_obj:
+#         box = box[1:]
+#         u1,v1 = worldToImage(-box[2],box[1],0)
+#         u2,v2 = worldToImage(-box[0],box[1],1.6)
+
+#         u1 = int(u1/2)
+#         v1 = int(v1/2)
+#         u2 = int(u2/2)
+#         v2 = int(v2/2)
+
+#         image = cv2.rectangle(image, (u1,v1), (u2,v2), (0, 0, 255), 3)
+
+#     RA_cartesian,_=polarTransform.convertToCartesianImage(np.moveaxis(out_seg,0,1),useMultiThreading=True,
+#         initialAngle=0, finalAngle=np.pi,order=0,hasColor=False)
+    
+#     # Make a crop on the angle axis
+#     RA_cartesian = RA_cartesian[:,256-100:256+100]
+    
+#     RA_cartesian = np.asarray((RA_cartesian*255).astype('uint8'))
+#     RA_cartesian = cv2.cvtColor(RA_cartesian, cv2.COLOR_GRAY2BGR)
+#     RA_cartesian = cv2.resize(RA_cartesian,dsize=(400,512))
+#     RA_cartesian=cv2.flip(RA_cartesian,flipCode=-1)
+#     return PowerSpectrum,image,RA_cartesian # custom return
+#     return np.hstack((PowerSpectrum,image[:512],RA_cartesian)) # initial return as in radial github repo
+
+
+# same as above but does not compute power spectrum
+def process_predictions_lite_version(model_outputs,image,config):
+    model_outputs_copy=model_outputs.copy()
+    pred_obj = model_outputs_copy['Detection'].detach().cpu().numpy().copy()[0]
+    out_seg = torch.sigmoid(model_outputs_copy['Segmentation']).detach().cpu().numpy().copy()[0,0]
+    pred_obj = encoder_decode(pred_obj,0.05,config)
+    pred_obj = np.asarray(pred_obj)
+    print('debug initial lenght of predictions: ',len(pred_obj))
+    if(len(pred_obj)>0):
+        pred_obj = process_predictions_FFT(pred_obj,confidence_threshold=0.9,nms_threshold=0.05)
+    print('debug lenght of predictions after process_predictions_FFT: ',len(pred_obj))
+    # test patch 2006:
+    number_of_preds=min(len(pred_obj),7)
+    
+    pred_obj=pred_obj[0:number_of_preds]
+    #pred_obj=pred_obj[:-number_of_preds]
+    print('debug lenght of predictions after process: ',len(pred_obj))
     ## Image
     for box in pred_obj:
         box = box[1:]
         u1,v1 = worldToImage(-box[2],box[1],0)
         u2,v2 = worldToImage(-box[0],box[1],1.6)
 
-        u1 = int(u1/2)
-        v1 = int(v1/2)
-        u2 = int(u2/2)
-        v2 = int(v2/2)
+        # intial code 
+        # u1 = int(u1/2)
+        # v1 = int(v1/2)
+        # u2 = int(u2/2)
+        # v2 = int(v2/2)
+
+        u1 = int(u1)
+        v1 = int(v1)
+        u2 = int(u2)
+        v2 = int(v2)
+
 
         image = cv2.rectangle(image, (u1,v1), (u2,v2), (0, 0, 255), 3)
 
@@ -549,21 +618,118 @@ def process_predictions(model_outputs,input,image):
     RA_cartesian = cv2.cvtColor(RA_cartesian, cv2.COLOR_GRAY2BGR)
     RA_cartesian = cv2.resize(RA_cartesian,dsize=(400,512))
     RA_cartesian=cv2.flip(RA_cartesian,flipCode=-1)
+    st.subheader("Detection Overlay")
+    st.image(image, caption="Image with Detection Bounding Boxes", channels="BGR")
+    st.subheader("Segmentation")
+    st.image(RA_cartesian, caption="Image with Detection Bounding Boxes", channels="BGR")
+    return image,RA_cartesian 
 
-    return np.hstack((PowerSpectrum,image[:512],RA_cartesian))
+
+def view_labels_on_image(df_labels,image):
+    print('debug entering gt viewer')
+    
+    bboxes_coordinate=df_labels[['x1_pix', 'y1_pix', 'x2_pix', 'y2_pix']]
+    
+    for row in range(bboxes_coordinate.shape[0]):
+        bb=bboxes_coordinate.loc[row]
+        u1=bb['x1_pix']
+        v1=bb['y1_pix']
+        u2=bb['x2_pix']
+        v2=bb['y2_pix']
+        image = cv2.rectangle(image, (u1,v1), (u2,v2), (0, 255, 0), 3)
+        
+    return image 
+
+
+def build_physical_values(range_bin:int,angle_bin:int):
+    range_m=range_bin*0.402343
+    angle_d=-90+angle_bin*0.35156
+    return range_m,angle_d
+
+def get_ra_bins(r_m,ang_d):
+    range_bin=round((r_m*256)/103)
+    azimuth_bin=round((ang_d+90)*512/180)
+    return range_bin,azimuth_bin
+
+def view_labels_on_range_angle_maps(model_outputs,df_labels):
+    
+    range_angle_labels=df_labels[['radar_X_m', 'radar_Y_m', 'radar_R_m', 'radar_A_deg', 'radar_D_mps', 'radar_P_db']]
+    radar_targets_coords_bins=[]
+    for row_index in range(range_angle_labels.shape[0]):
+        radar_target_labels=range_angle_labels.loc[row_index]
+        x_pos=radar_target_labels['radar_X_m']
+        print('xpos: ',x_pos)
+        
+        y_pos=radar_target_labels['radar_Y_m']
+        print('ypos: ',y_pos)
+        range_target=radar_target_labels['radar_R_m']
+        print('range m ',range_target)
+        azimuth_target=radar_target_labels['radar_A_deg']
+        print('azimuth: ',azimuth_target)
+        range_bin,angle_bin=get_ra_bins(range_target,azimuth_target)
+    
+        radar_targets_coords_bins.append((range_bin,angle_bin))
+        print('~~~~~',range_bin,angle_bin)
+        speed_target=radar_target_labels['radar_D_mps']
+        print('speed: ',speed_target)
+        power_target=radar_target_labels['radar_P_db']
+        print('power: ',power_target)
+       
+    model_outputs_copy=model_outputs.copy()
+    out_seg = torch.sigmoid(model_outputs_copy['Segmentation']).detach().cpu().numpy().copy()[0,0]
+    
+    RA_cartesian,_=polarTransform.convertToCartesianImage(np.moveaxis(out_seg,0,1),useMultiThreading=True,
+        initialAngle=0, finalAngle=np.pi,order=0,hasColor=False)
+    
+    #RA_cartesian=cv2.flip(RA_cartesian,flipCode=-1)
+    for (range_bin, angle_bin) in radar_targets_coords_bins:
+        # Draw a rectangle instead of a circle
+        cv2.rectangle(RA_cartesian, (angle_bin - 5, range_bin - 5), (angle_bin + 5, range_bin + 5),color=1.0, thickness=1)
+    
+    RA_cartesian = cv2.rotate(RA_cartesian, cv2.ROTATE_180)
+    
+    st.image(RA_cartesian,caption='insider')
+    # Make a crop on the angle axis
+    # RA_cartesian = RA_cartesian[:,256-100:256+100] #156 to 326 =200
+    
+    # RA_cartesian = np.asarray((RA_cartesian*255).astype('uint8'))
+    
+    # RA_cartesian = cv2.cvtColor(RA_cartesian, cv2.COLOR_GRAY2BGR) # 
+    
+    # RA_cartesian = cv2.resize(RA_cartesian,dsize=(400,512)) # 512 400 3
+    
+    # RA_cartesian=cv2.flip(RA_cartesian,flipCode=-1)
+    
+    return RA_cartesian 
+    
     
 
-def run_inference_and_plot(net, signal_process_layer, device, idx, adc_folder):
+def run_inference_and_plot(net, signal_process_layer, device, idx, adc_folder,img_folder,label_folder,config,view_raw_data=False):
     """Runs inference for a given idx and generates plots."""
-    st.write(f"Processing raw_adc_{idx}.npy")
+    st.write(f"Processing raw_adc_{idx}.npy .....")
     
     adc_path = os.path.join(adc_folder, f'raw_adc_{idx}.npy')
+    img_path = os.path.join(img_folder,f'img_{idx}.npy')
+    label_path = os.path.join(label_folder,f'bboxes_{idx}.csv')
+
+    if not os.path.exists(label_path):
+        annotations_exist=False
+    else:
+        df_labels=pd.read_csv(label_path)
+        #print(df_labels.columns)
+        annotations_exist=True
+
     if not os.path.exists(adc_path):
         st.error(f"ADC file not found: {adc_path}. Please check the data path and file existence.")
+        return
+    if not os.path.exists(img_path):
+        st.error(f"Image file not found: {img_path}. Please check the data path and file existence.")
         return
 
     try:
         sample_adc = np.load(adc_path)
+        img_numpy=np.load(img_path)
+        
     except Exception as e:
         st.error(f"Error loading ADC data for index {idx}: {e}")
         return
@@ -572,105 +738,113 @@ def run_inference_and_plot(net, signal_process_layer, device, idx, adc_folder):
     
     with torch.no_grad(): 
         signal_processed = signal_process_layer(batch_sample_adc.to(device))
-        #signal_processed = split_real_imag(signal_processed)
-        signal_processed=interleave_real_imag(signal_processed)
+        signal_processed = split_real_imag(signal_processed)
+        #signal_processed=interleave_real_imag(signal_processed)
         prediction = net(signal_processed)
 
-    detection_output = prediction['Detection']
-    segmentation_output = prediction['Segmentation']
+    
+    if view_raw_data:
+        detection_output = prediction['Detection']
+        segmentation_output = prediction['Segmentation']
+        # --- Plot Segmentation Output ---
+        st.subheader("Segmentation FFT Output")
+        spatial_map = segmentation_output.squeeze().cpu().detach().numpy()
+        fig1, ax1 = plt.subplots(figsize=(8, 7)) # Increased figure size for better display in Streamlit
+        im1 = ax1.imshow(spatial_map, cmap='viridis') # Changed cmap to 'viridis' for better contrast
+        fig1.colorbar(im1, ax=ax1, label='Intensity')
+        ax1.set_title(f"Segmentation Output for idx: {idx}")
+        ax1.set_xlabel("Angle (bins)")
+        ax1.set_ylabel("Range (bins)")
+        st.pyplot(fig1)
+        plt.close(fig1) # Close the figure to free up memory
+
+        # --- Plot Detection Output Channels ---
+        st.subheader("Detection Output Channels")
+        x_detection = detection_output.squeeze(0)
+        fig2, axes2 = plt.subplots(1, 3, figsize=(18, 6)) 
+        titles = ["Confidence", "Range Regression", "Angle Regression"] 
+
+        for i in range(3):
+            channel = x_detection[i].cpu().detach().numpy()
+            im2 = axes2[i].imshow(channel, cmap='plasma') # Changed cmap for variety
+            axes2[i].set_title(titles[i])
+            axes2[i].axis('off')
+            fig2.colorbar(im2, ax=axes2[i], orientation='vertical', pad=0.05) # Add colorbar for each subplot
+
+        plt.tight_layout()
+        st.pyplot(fig2)
+        plt.close(fig2) # Close the figure
+        sys.exit('view raw data done will exit')
+
+    if annotations_exist:
+        img_numpy=view_labels_on_image(df_labels=df_labels,image=img_numpy)
+        ra_cartesian_with_targets=view_labels_on_range_angle_maps(model_outputs=prediction,df_labels=df_labels)
+
+    else:
+        st.write('No labels for frame: ',idx)
+    
+    
+    image_r,range_angle_cartesian=process_predictions_lite_version(config=config,model_outputs=prediction,image=img_numpy)
+    
 
     
-    hmi=process_predictions(model_outputs=prediction,input=sample_adc,image='/home/christophe/ComplexNet/STREAM/auto_radar.jpg')
-    
 
-    cv2.imshow('FFTRadNet',hmi)
-        
+    # st.subheader("Range-Angle Cartesian Projection")
+    # st.image(range_angle_cartesian, caption="Range-Angle Cartesian", channels="BGR") 
     # Press Q on keyboard to  exit
     # if cv2.waitKey(25) & 0xFF == ord('q'):
     #     break
-    #sys.exit('decoded predictions not done')
     
-
-    # --- Plot Segmentation Output ---
-    st.subheader("Segmentation FFT Output")
-    spatial_map = segmentation_output.squeeze().cpu().detach().numpy()
-    fig1, ax1 = plt.subplots(figsize=(8, 7)) # Increased figure size for better display in Streamlit
-    im1 = ax1.imshow(spatial_map, cmap='viridis') # Changed cmap to 'viridis' for better contrast
-    fig1.colorbar(im1, ax=ax1, label='Intensity')
-    ax1.set_title(f"Segmentation Output for idx: {idx}")
-    ax1.set_xlabel("Angle (bins)")
-    ax1.set_ylabel("Range (bins)")
-    st.pyplot(fig1)
-    plt.close(fig1) # Close the figure to free up memory
-
-    # --- Plot Detection Output Channels ---
-    st.subheader("Detection Output Channels")
-    x_detection = detection_output.squeeze(0)
-    fig2, axes2 = plt.subplots(1, 3, figsize=(18, 6)) # Increased figure size
-    titles = ["Confidence", "Range Regression", "Angle Regression"] # More descriptive titles
-
-    for i in range(3):
-        channel = x_detection[i].cpu().detach().numpy()
-        im2 = axes2[i].imshow(channel, cmap='plasma') # Changed cmap for variety
-        axes2[i].set_title(titles[i])
-        axes2[i].axis('off')
-        fig2.colorbar(im2, ax=axes2[i], orientation='vertical', pad=0.05) # Add colorbar for each subplot
-
-    plt.tight_layout()
-    st.pyplot(fig2)
-    plt.close(fig2) # Close the figure
-
 # --- Streamlit Page Main Function ---
 def app_page():
     st.set_page_config(layout="centered", page_title="FFTRadNet Radar Visualization")
+    #import pdb; pdb.set_trace()
     st.title("FFTRadNet Radar Data Visualization")
     st.markdown("Explore the segmentation and detection outputs of the FFTRadNet model for different radar samples.")
-    LABELS = pd.read_csv('/home/christophe/ComplexNet/STREAM/labels_CVPR.csv').to_numpy()
-    
-    CONFIG_PATH = '/home/christophe/ComplexNet/STREAM/config_FFTRadNet_192_56.json'
-    CHECKPOINT_PATH = '/home/christophe/ComplexNet/STREAM/FFTRadNet_RA_192_56_epoch78_loss_172.8239_AP_0.9813.pth'
-    ADC_FOLDER = '/home/christophe/RADIalP7/SMALL_DATASET/TEST/ADC/'
+     
+    config_json_path = '/home/christophe/ComplexNet/STREAM/config_FFTRadNet_192_56.json'
+    checkpoint_path = '/home/christophe/ComplexNet/STREAM/FFTRadNet_RA_192_56_epoch78_loss_172.8239_AP_0.9813.pth'
+    adc_folder = '/home/christophe/RADIalP7/STREAM2/ADC/'
+    image_folder='/home/christophe/RADIalP7/STREAM2/IMG/'
+    label_folder='/home/christophe/RADIalP7/STREAM2/LABELS/'
 
-    
-    net, signal_process_layer, device = load_model(CONFIG_PATH, CHECKPOINT_PATH)
-
+    net, signal_process_layer, device = load_model(config_json_path, checkpoint_path)
+    signal_process_layer.eval()
+    net.eval()
     if net is None or signal_process_layer is None:
         st.error("Model or Signal Processing Layer could not be loaded. Please check paths and error messages above.")
-        return
-
-    # Determine min/max idx for slider based on available files
+        raise Exception
+    
+    # Gather available ADC indices
     try:
-        adc_files = [f for f in os.listdir(ADC_FOLDER) if f.startswith('raw_adc_') and f.endswith('.npy')]
+        adc_files = [f for f in os.listdir(adc_folder) if f.startswith('raw_adc_') and f.endswith('.npy')]
         if not adc_files:
-            st.warning(f"No ADC files found in {ADC_FOLDER}. Please ensure data is present.")
-            min_idx, max_idx = 0, 0
+            st.warning(f"No ADC files found in {adc_folder}. Please ensure data is present.")
+            raise Exception('No radar data found')
         else:
-            indices = [int(f.replace('raw_adc_', '').replace('.npy', '')) for f in adc_files]
-            min_idx = min(indices)
-            max_idx = max(indices)
+            available_indices = sorted([int(f.replace('raw_adc_', '').replace('.npy', '')) for f in adc_files])
     except FileNotFoundError:
-        st.error(f"ADC data folder not found: {ADC_FOLDER}")
-        min_idx, max_idx = 0, 0 # Fallback values
+        st.error(f"ADC data folder not found: {adc_folder}")
+        available_indices = []
     except Exception as e:
-        st.error(f"Error determining ADC file range: {e}")
-        min_idx, max_idx = 0, 0
+        st.error(f"Error determining ADC file indices: {e}")
+        available_indices = []
 
     st.markdown("---")
 
-    # Slider for idx selection
-    if min_idx <= max_idx:
-        selected_idx = st.slider(
-            "Select ADC Data Index:",
-            min_value=min_idx,
-            max_value=max_idx,
-            value=min_idx, # Default to the first available index
-            step=1
-        )
+    # Selection with dropdown
+    if available_indices:
+        selected_idx = st.selectbox("Select ADC Data Index:", available_indices, index=0)
         st.info(f"Currently viewing data for index: **{selected_idx}**")
-        run_inference_and_plot(net, signal_process_layer, device, selected_idx, ADC_FOLDER)
+        
     else:
-        st.warning("Could not determine valid range for ADC data indices. Slider not displayed.")
-        st.info(f"Please ensure ADC files are in '{ADC_FOLDER}' and named like 'raw_adc_X.npy'.")
+        st.warning("No valid ADC files found. Please check your data folder.")
+    config_json = json.load(open(config_json_path))
+    if st.button("Run Inference on radar data"):
+        run_inference_and_plot(net, signal_process_layer, device, selected_idx, adc_folder,
+                                   image_folder, label_folder,config=config_json, view_raw_data=False)
+    
+    
 
 # This is the entry point for your Streamlit app
 if __name__ == '__main__':

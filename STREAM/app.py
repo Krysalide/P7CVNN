@@ -28,30 +28,6 @@ components.html(f"""
 st.write("---")
 
 
-# gif_path = "output_range_dopller.gif"
-
-# try:
-#     with open(gif_path, "rb") as file:
-#         gif_bytes = file.read()
-    
-#     # Encode the GIF to base64
-#     gif_base64 = base64.b64encode(gif_bytes).decode()
-    
-#     # Use st.markdown to insert an HTML <img> tag with the base64 GIF
-#     st.header("Animated GIF")
-#     st.markdown(
-#         f'<img src="data:image/gif;base64,{gif_base64}" alt="Animated GIF" style="width:100%;">',
-#         unsafe_allow_html=True,
-#     )
-#     st.caption("My animated GIF (using HTML markdown)")
-
-# except FileNotFoundError:
-#     st.warning(f"Please place the GIF file '{gif_path}' in the same directory as your script.")
-
-# st.write("---")
-# st.write("You can adjust the `caption` and styling as needed.")
-
-
 try:
     with open("output_range_dopller.gif", "rb") as file:
         local_gif = file.read()

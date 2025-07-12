@@ -18,9 +18,13 @@ class FirstFFTLinearLayer(nn.Module):
         # Create the DFT matrix as it is in custom_signal_processing
         # weights fit with fft matrix coefficients
         if use_fft_weights:
+            n = np.arange(N)
+            omega = np.exp(-2j * np.pi / N)
+            dft_matrix_np = omega ** (n[:, None] * n[None, :])  # Outer product
+
             
-            j, k = np.meshgrid(np.arange(N), np.arange(N), indexing='ij')
-            dft_matrix_np = np.exp(-2j * np.pi * j * k / N)
+            # j, k = np.meshgrid(np.arange(N), np.arange(N), indexing='ij')
+            # dft_matrix_np = np.exp(-2j * np.pi * j * k / N)
             self.dft_matrix = nn.Parameter(torch.tensor(dft_matrix_np, dtype=torch.complex64), requires_grad=False)
         else:
             # Random unit magnitude complex matrix
@@ -215,6 +219,36 @@ class SignalProcessLayer(nn.Module):
         return self.hamming1.get_window_range_coefficients()
     def get_window_doppler_coeff(self):
         return self.hamming2.get_window_doppler_coefficients()
+    
+class SignalProcessLayerV2(nn.Module):
+    name='signal_process_neural_network'
+    def __init__(self,use_first_fft_weights=True,use_second_fft_weights=True):
+        super().__init__()
+        self.hamming1 = Hamming_window_range()
+        self.first_fft_layer=FirstFFTLinearLayer(input_size=512,use_fft_weights=use_first_fft_weights)
+        self.hamming2=Hamming_window_doppler()
+        self.second_fft_layer=SecondFFTLinearLayer(input_size=256,use_fft_weights=use_second_fft_weights)
+
+    
+    def forward(self, x):
+        x = self.hamming1(x)
+        x=x.clone().detach().to(dtype=torch.complex64)
+        x = self.first_fft_layer(x)
+        x=self.hamming2(x)
+        x=x.clone().detach().to(dtype=torch.complex64)
+        x=self.second_fft_layer(x)
+        return x
+    
+    def get_range_weights(self):
+        return self.first_fft_layer.get_range_fft_weights()
+    
+    def get_doppler_weights(self):
+        return self.second_fft_layer.get_doppler_fft_weights()
+    
+    def get_window_range_coeff(self):
+        return self.hamming1.get_window_range_coefficients()
+    def get_window_doppler_coeff(self):
+        return self.hamming2.get_window_doppler_coefficients()
 
 # does not contain windowing so useless 
 def build_fft_by_dot_product_numpy(complex_adc):
@@ -246,11 +280,11 @@ if __name__ == '__main__':
     print('layers succesfully created')
 
     # raw data
-    adc_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/TEST/ADC/'
+    adc_folder='/home/christophe/RADIalP7/SMALL_DATASET/TEST/ADC/'
     # first fft computed with radial tools (ground truth)
-    fft_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/TEST/FFT/'
+    fft_folder='/home/christophe/RADIalP7/SMALL_DATASET/TEST/FFT/'
     # range doppler computed with radial tools (ground truth)
-    fft_fold2=f'/home/christophe/RADIalP7/SMALL_DATASET/TEST/FFT2/'
+    fft_fold2='/home/christophe/RADIalP7/SMALL_DATASET/TEST/FFT2/'
     times_fft1=[]
     times_fft2=[]
     times_signal_process=[]
