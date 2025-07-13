@@ -3,8 +3,7 @@ import sys
 import os
 import time
 from enum import Enum
-import random
-import numpy as np
+
 import matplotlib.pyplot as plt
 
 from ComplexUnet import complex_mse_loss,hybrid_loss

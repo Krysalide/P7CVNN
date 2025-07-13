@@ -4,7 +4,42 @@ import numpy as np
 import time 
 
 '''
-Last up to date version
+
+This file contains our work on migrating the signal process from classical calculus
+(Scipy and or numpy) to neural networks. 
+Our layer can handle complex values such as raw radar data.
+
+The FFT are now applied via a Linear layer wich in turn is the FFT matrix.
+It can be initialized randomly or with exact FFT coefficients.
+It can be trained as any pytrorch module (could increase performances).
+Our limitted GPU ressources did not allow us to proove this fact. 
+To experiment on such matters, we switched to an easier task of classification of bird 
+songs, see notebook. 
+
+ 
+It is much faster than classical methods on CPU, but needs GPU to get that speed.
+This increase in speed is crucial for automotive radar which have to work in real time.
+It has not yet been compared with Cupy FFT (that uses GPU too).
+As demonstrated in our streamlit app it can be use with the neural network develloped by Radial as it is was designed
+to produce range dopller maps. 
+
+This work came after our first 'naive' experimentations with UNET models:
+We wanted to test wether such networks were able to produce FFT without prior knowledge.
+These experiments showed that the signal processing expertise is needed to perform FFT.
+Our Unet models were able to learn the magnitude of range doppler maps but did 
+not show good ability to learn the phase. 
+
+
+We made a succesfull training of one FFT layer, trained on just one sample. The other FFT was initialized
+with exact weights, the trained one with random weights.The layer succeeded in learning the FFT weights.
+To do so we had to devellop a loss able to quantify error both in magnitude and phase.
+A good strategy was to multiply the two losses of those 2 quantities.
+It was important but unintuitive to train with only one radar frame. 
+
+To conclude: neural networks can offer fast implemenations of signal processing but they need the prior 
+knowledege of signal processing. A 'big black box' with many learnable parameters does not seem to be able to 
+realize an FFT or would be too big or too difficult to train. 
+
 '''
 
 # TODO add windowing!! inside FFTLinearLayer -> done
@@ -149,14 +184,15 @@ class SecondFFTLinearLayer(nn.Module):
     
 class Hamming_window_range(nn.Module):
     '''
-    applies windowing as it is found in radial repo
-    if not applied results can differ in an important way
-    for now we have to set this layer to non trainable? 
+    applies windowing as it is found in Radial repo
+    Note: if not applied results can differ in an important way
+    for now we have to set this layer to non trainable.
     '''
 
     def __init__(self):
         super(Hamming_window_range, self).__init__()
         self.hanning_window_range=torch.tensor(np.load('/home/christophe/ComplexNet/Experimental/hanning_window_range.npy'))
+    
     def forward(self,complex_adc):
         windowed_signal=torch.multiply(complex_adc,self.hanning_window_range.to('cuda'))
         return windowed_signal
@@ -168,6 +204,9 @@ class Hamming_window_range(nn.Module):
 
 
 class Hamming_window_doppler(nn.Module):
+    '''
+    Windowing applied before doppler FFT
+    '''
     def __init__(self):
         super(Hamming_window_doppler, self).__init__()
         self.hanning_window_doppler=torch.tensor(np.load('/home/christophe/ComplexNet/Experimental/hanning_window_dopller.npy'))
@@ -178,16 +217,6 @@ class Hamming_window_doppler(nn.Module):
     def get_window_doppler_coefficients(self):
         print(self.hanning_window_doppler.shape)
         return self.hanning_window_doppler
-    
-# ChatGPT Code does not work ???
-# class Hamming_window_rangeV2(nn.Module):
-#     def __init__(self):
-#         super(Hamming_window_range, self).__init__()
-#         window = np.load('/home/christophe/ComplexNet/Experimental/hanning_window_range.npy')
-#         self.register_buffer('hanning_window_range', torch.tensor(window, dtype=torch.complex64))
-
-#     def forward(self, complex_adc):
-#         return complex_adc * self.hanning_window_range
     
 
 class SignalProcessLayer(nn.Module):
@@ -219,8 +248,16 @@ class SignalProcessLayer(nn.Module):
         return self.hamming1.get_window_range_coefficients()
     def get_window_doppler_coeff(self):
         return self.hamming2.get_window_doppler_coefficients()
-    
+
+
+
+
 class SignalProcessLayerV2(nn.Module):
+    '''
+    Improved Module that alows to set weights of ffts
+    Contains the hanning windows as found in Radial work
+
+    '''
     name='signal_process_neural_network'
     def __init__(self,use_first_fft_weights=True,use_second_fft_weights=True):
         super().__init__()

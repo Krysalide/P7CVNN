@@ -16,7 +16,7 @@ def phase_error_per_antenna(pred, target):
     
     phase_diff = torch.angle(pred) - torch.angle(target)
    
-    phase_diff = torch.atan2(torch.sin(phase_diff), torch.cos(phase_diff))
+    #phase_diff = torch.atan2(torch.sin(phase_diff), torch.cos(phase_diff))
     return torch.abs(phase_diff).mean(dim=(0, 2, 3))  # Shape: [A]
 
 

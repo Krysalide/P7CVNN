@@ -1,23 +1,21 @@
-# train script
+''''
+STATUS-RENDU
+here we test our pytorch signal process layer.
+It is able to produce range doppler maps.
+We wanted to test if our layer was able to learn the FFT transform
+The answer is positive if one of the fft layer is initiated with exact weights and the other
+with random weights.
+To achieve this result we had to do some search about loss:
+We got good results whit relative losses.
+See for example the complex_relative_mse_loss_v3
+This work does not have much practical interrest though: exact weights can be set easily.
+We produced plots before and after training, some will be shown in the slides.
 
-# TODO
-# continue testing loss functions, see other tactics
-# good learning rate seem to be vary small -> maybe other optimizer? -> not done
-# increase size of dataset -> done
-# have a look to validation metrics -> not done
-# log with mlflow the loss function (enum?) -> done
-# add possibility to resume training -> not done
-# 06 06 tried to add some noise or  initiate randm weights instead of DFT weights
-# VERY IMPORTANT REQUIRES GRAD INSIDE FFTLAYER
-
-# Begin time benchmark (implement torch.fft dans radial??)
-
-# x and y labels in plots
+'''
 import sys
 import os
 import time
 from enum import Enum
-import random
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -26,26 +24,24 @@ from ComplexUnet import complex_relative_mse_loss
 from ComplexUnet import phase_loss
 from ComplexUnet import hybrid_loss
 
-# wip to be tested
-from loss_function_relative import complex_relative_mse_loss_v1,complex_relative_mse_loss_v2
+
+from loss_function_relative import complex_relative_mse_loss_v1
+from loss_function_relative import complex_relative_mse_loss_v2
 from loss_function_relative import complex_relative_mse_loss_v3
 from loss_function_relative import complex_relative_mse_phase_loss
 
-from Experimental.learnable_fft_wip2 import SignalProcessLayer
+
 from Experimental.learnable_fft_wip2 import SignalProcessLayerV2
 
-from ComplexUnet import visualize_complex_norm,visualize_complex_plane,visualize_complex_weights
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
 
-from torch.optim.lr_scheduler import StepLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
+
+from torch.optim.lr_scheduler import StepLR
 import mlflow
 
-from p7_utils import list_record_folders,plot_network_loss
-from p7_utils import create_dataloaders, check_gpu_availability
-from p7_utils import normalize_complex_amplitude
+
+from p7_utils import  check_gpu_availability
+
 
 from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
 #from data_reader import RadarFFTDataset
@@ -155,8 +151,6 @@ def plot_hanning_window(tensor,file_name,show_plot,title, cmap="viridis"):
         plt.close()
         return save_path
 
-
-
 num_cpus = os.cpu_count()
 print(f"Number of CPUs: {num_cpus}")
 
@@ -184,29 +178,15 @@ else:
     print('Will start training from scratch')
     #model=SignalProcessLayer(use_fft_weights=use_fft_weights).to(device=device)
     model=SignalProcessLayerV2(use_first_fft_weights=True,use_second_fft_weights=False).to(device=device)
+
 save_model=True
+
 if save_model:
     print('Model will be saved after training')
 else:
     print('Model will not be saved after training')
 
 print('model: ',model.name,' initiated')
-
-# TODO check if code ok and test with False
-# for param in model.hamming1.parameters():
-#     param.requires_grad = True
-# for param in model.hamming2.parameters():
-#     param.requires_grad = True
-
-
-# for param in model.first_fft_layer.parameters():
-#     param.requires_grad = True
-# for param in model.second_fft_layer.parameters():
-#     param.requires_grad = True
-
-# for name, param in model.named_parameters():
-#     print(f"{name}: requires_grad = {param.requires_grad}")
-
 
 model.eval()
 range_fft_weights=model.get_range_weights()
@@ -247,9 +227,8 @@ name_optimizer=optimizer.__class__.__name__
 
 print('optimizer used to train: ',name_optimizer)
 
-# useless ? 
-scheduler=StepLR(step_size=400,gamma=1.1,optimizer=optimizer)
 
+scheduler=StepLR(step_size=400,gamma=1.1,optimizer=optimizer)
 
 name_scheduler=scheduler.__class__.__name__
 
@@ -286,24 +265,17 @@ print('Loss type used to train: ',type_loss.value)
 
 
 print('Entering data loading...')
-ratio_test=1/3 # here we take only one sample to train?? 
-full_data=False
-if not full_data:
+ratio_test=1/3 # here we take only one sample to train!!! 
+
     
-    data_folder='/home/christophe/RADIalP7/SMALL_DATASET/TEST'
-    assert os.path.exists(data_folder), 'data not found'
-    element_number=3
-    assert element_number<61, "number of element is limited to 60 for now"
-    indices = list(range(element_number)) # specify number of elements
+data_folder='/home/christophe/RADIalP7/SMALL_DATASET/TEST'
+assert os.path.exists(data_folder), 'data not found'
+element_number=3
+assert element_number<61, "number of element is limited to 60 for now"
+indices = list(range(element_number)) # specify number of elements
 
-    dataset = RadarFFTDataset(data_folder, indices)
-    print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples)")
-
-else:
-    raise NotImplementedError('recursive dataset not yet built')
-    data_folder='/media/christophe/backup/DATARADIAL'
-    dataset=RadarDatasetV2(data_folder,recursive=True)
-    print(f"Dataset length: {len(dataset)}, gathered all data available from folder: {data_folder} ")
+dataset = RadarFFTDataset(data_folder, indices)
+print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples)")
 
 
 # for now all data is splited in train and val, no data for test
@@ -479,24 +451,11 @@ mlflow.log_artifact(plot_path2)
 mlflow.log_artifact(post_train_r_fft_path)
 mlflow.log_artifact(post_train_dopller_fft_path)
 
-# if model_type==NetType.ONE_LAYER:
-
-#     mlflow.log_artifact(path_complex_weight)
-#     mlflow.log_artifact(path_complex_norm)
 
 mlflow.end_run()
-#os.remove(plot_path)
-#os.remove(plot_path2)
-# if model_type==NetType.ONE_LAYER:
-#     os.remove(path_complex_weight)
-#     os.remove(path_complex_norm)
+
 
 print('------End of Network Training------------')
-
-# 100 samples 36 seconds
-# 250 smaples 86 seconds
-
-
 
 
 

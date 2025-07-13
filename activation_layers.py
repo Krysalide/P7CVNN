@@ -2,11 +2,16 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+'''
+
+This script contains complex activation functions
+
 # code found on github
 #https://github.com/saurabhya/FCCNs/blob/main/complex_activations.py
-# PRETTY SIMPLE COMPLEX ACTIVATIONS
-# to be tested
-# see also cardioid activation function
+
+
+'''
+
 class CReLU(nn.Module):
     ''''
     Simply apply ReLU to the real and imaginary parts of the complex number

@@ -1,50 +1,57 @@
 # train script
+
+'''
+# STATUS: RENDU
+First naive script that tries to train a Unet like architecture
+Networks are able to handle complex values as inputs
+The Unet was supposed to be able to produce range doppler maps from raw radar data
+It was thus supposed to be able to learn 2 ffts transforms
+We tested various structure
+Poor results wich tend to prove we cannot avoid expertise from signal processing
+
+'''
 import sys
 import os
 import time
 from enum import Enum
-import random
-import numpy as np
 import matplotlib.pyplot as plt
-
+from loss_function_relative import complex_relative_mse_loss_v3
 from ComplexUnet import complex_mse_loss,hybrid_loss
 from ComplexUnet import phase_loss
 from ComplexUnet import ComplexUNet
 from ComplexUnet import SmallComplexUNet
 from ComplexUnet import TinyComplexUNet
 from ComplexCardoidUnet import ComplexUNetCardioid
-from Experimental.learnable_fft_wip2 import SignalProcessLayer
+
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-from torch.optim.lr_scheduler import StepLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
+from torch.optim.lr_scheduler import StepLR
 import mlflow
 
-from p7_utils import list_record_folders,plot_network_loss
-from p7_utils import create_dataloaders, check_gpu_availability
-from p7_utils import normalize_complex_amplitude
+from p7_utils import check_gpu_availability
 
-from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
+from radar_metrics import complex_mse_per_antenna
+from radar_metrics import phase_error_per_antenna
+
 from data_reader import RadarDataset,RadarDatasetV2
-from data_reader import load_data
-from data_reader import split_dataloader
 
+from data_reader import split_dataloader
 
 num_cpus = os.cpu_count()
 print(f"Number of CPUs: {num_cpus}")
 
-gpu_ok,_=check_gpu_availability()
-device='cuda'
+gpu_ok,device=check_gpu_availability()
+#device='cuda'
 if not gpu_ok:
     
     sys.exit('No GPU available, exiting')
     
-in_channels = 16  # shall remain fixed equal to the number of antennas
+in_channels = 16  # shall remain fixed equal to the number of antennas 
 out_channels = 16  # same as in_channels
+
 resume_training=False
+
 if resume_training:
-    print('Resume training')
+    print('A pretrained model will be loaded')
 else:
     print('Will start training from scratch')
 save_model=True
@@ -53,15 +60,16 @@ if save_model:
 else:
     print('Model will not be saved after training')
 
+# various models can be loaded
 class NetType(Enum):
     UNET = "complex_unet"
     CARDIOID_UNET = "complex_cardioid_unet"
     SMALL_UNET = "complex_small_unet"
     TINY_UNET="complex_tiny_unet"
-    LEARN_FFT="signal_process_net"
+
     
-#cardioid_model=True
-model_type=NetType.LEARN_FFT
+
+model_type=NetType.CARDIOID_UNET
 
 if model_type==NetType.CARDIOID_UNET:
     model = ComplexUNetCardioid(in_channels=in_channels, out_channels=out_channels).to(device)
@@ -105,9 +113,7 @@ elif model_type==NetType.TINY_UNET:
         save_path='/home/christophe/ComplexNet/tiny_complex_net_one_run.pth' 
         model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
 
-elif model_type==NetType.LEARN_FFT:
-    save_path='/home/christophe/ComplexNet/signal_process_net.pth'
-    model=SignalProcessLayer()
+
 
 else:
     raise ValueError("Invalid model type")
@@ -134,7 +140,7 @@ class LossType(Enum):
 type_loss=LossType.MSE_LOSS
 
 if type_loss==LossType.MSE_LOSS:
-    loss_function = complex_mse_loss
+    loss_function = complex_relative_mse_loss_v3
 elif type_loss==LossType.PHASE_LOSS:
     loss_function = phase_loss
     print('Warning loss function seems to be non convex!!!')
@@ -148,8 +154,9 @@ full_data=False
 if not full_data:
     # use if you want a small set of data
     sequence = 'RECORD@2020-11-21_11.54.31'
-    data_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
-    indices = list(range(30)) # specify number of elements
+    #data_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
+    data_folder='/home/christophe/ComplexNet/one_sample'
+    indices = list(range(12)) 
 
     dataset = RadarDataset(data_folder, indices)
     print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples from sequence: {sequence})")
@@ -161,7 +168,7 @@ else:
     
 
 
-train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=8)
+train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=8,train_ratio=0.1,val_ratio=0.2,test_ratio=0.7)
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
 
 mlflow.start_run()
@@ -187,7 +194,7 @@ plot_losses=[]
 val_mse_history = []
 val_phase_history = []
 print('------Entering Network Training------------')
-epochs = 10
+epochs = 1000
 mlflow.log_param("epochs", epochs)
 print(f"Total epochs: {epochs}")
 print(f"Batch size: {train_loader.batch_size}")
@@ -197,12 +204,10 @@ for epoch in range(epochs):
     model.train()
     for batch_data, batch_target in train_loader:
         
-        if model_type!=NetType.LEARN_FFT:
-            x = batch_data.permute(0, 3, 1, 2).to(device, torch.complex64)
-            y = batch_target.permute(0, 3, 1, 2).to(device, torch.complex64)
-        else:
-            x = batch_data.to(device, torch.complex64)
-            y = batch_target.to(device, torch.complex64)
+        
+        x = batch_data.permute(0, 3, 1, 2).to(device, torch.complex64)
+        y = batch_target.permute(0, 3, 1, 2).to(device, torch.complex64)
+        
 
         optimizer.zero_grad()
         out_complex = model(x)
