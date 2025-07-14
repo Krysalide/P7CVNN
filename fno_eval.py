@@ -1,16 +1,16 @@
-import time
-import numpy as np
-import sys
+'''
+Test of fourier neural operators
+# did not give any good results.
+# would be cool to test again lighter networks (with one or two spectral conv layers)
+# after training some plots were made, we kept some samples. 
+'''
+
 import torch
-import torch.nn as nn
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
-
 from data_reader import RadarDataset,split_dataloader
 from neuralop.models import FNO2d 
 from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
-
-
 
 interactive = False
 graph_2D=True
@@ -29,14 +29,8 @@ if model_evaluated=='fno':
         model.load_state_dict(torch.load(PATH, weights_only=False))
         print('Model loaded from', PATH)
     
-else:
-    raise ValueError("Invalid model name. Choose 'ComplexUNet' or 'ComplexUNetCardioid'.")
-
 
 model.eval()
-
-
-#print_model_layers(model)
 
 sequence = 'RECORD@2020-11-21_11.54.31'
 save_folder = f'/media/christophe/backup/DATARADIAL/{sequence}'
@@ -49,8 +43,6 @@ print(f"Dataset length: {len(dataset)}")
 train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=8)
 print("=== Dataloaders created ===")
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
-
-
 
 print("Evaluating model on test set...")
 test_loss = 0.0
@@ -107,8 +99,6 @@ rd_map_predicted = model(sample_adc_frame.unsqueeze(0))
 print(rd_map_predicted.shape)
 rd_map_predicted=torch.squeeze(rd_map_predicted)
 print(rd_map_predicted.shape)
-
-
 
 # we run over all the antennas
 # and plot the results
@@ -251,7 +241,7 @@ for i in range(16):
             zaxis_title='Phase (rad)'
         )
     )
-    #fig_rd.show()
+    
     fig_rd.write_html(f'./FNO/plot3D/phase_rd_antenna_{i}.html')
 
     # ---------- FIGURE 3 : Différence ----------

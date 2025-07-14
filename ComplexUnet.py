@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 
 from complexPyTorch.complexLayers import ComplexConv2d, ComplexReLU, ComplexBatchNorm2d, ComplexConvTranspose2d
 from complexPyTorch.complexLayers import ComplexLinear
-# to be tested
-from activation_layers import CReLU, CPReLU, Naive_ComplexSigmoid, Naive_ComplexTanh,Cardioid
+
 
 
 class ComplexMaxPool2d(nn.Module):

@@ -42,7 +42,7 @@ realize an FFT or would be too big or too difficult to train.
 
 '''
 
-# TODO add windowing!! inside FFTLinearLayer -> done
+
 
 class FirstFFTLinearLayer(nn.Module):
     def __init__(self, input_size,use_fft_weights=True):
@@ -74,7 +74,7 @@ class FirstFFTLinearLayer(nn.Module):
             torch.cat((self.dft_matrix.real, -self.dft_matrix.imag), dim=1),
             torch.cat((self.dft_matrix.imag, self.dft_matrix.real), dim=1)
         ), dim=0)
-        
+        # requires grad=True makes the layer trainable
         self.linear.weight = nn.Parameter(weight_matrix.float(), requires_grad=True)
         self.linear.bias = None
 
@@ -93,7 +93,7 @@ class FirstFFTLinearLayer(nn.Module):
         imag_input = input_flattened.imag
         combined_input = torch.cat((real_input, imag_input), dim=-1) 
 
-        # Perform the linear transformation
+        # Perform the matrix multiplication
         combined_output = self.linear(combined_input)
 
         # Separate real and imaginary parts of the output
@@ -111,11 +111,11 @@ class FirstFFTLinearLayer(nn.Module):
         return output_reshaped.permute(0, 3, 1, 2) # (batch, 512, 256, 16)
     
 
-    # experimental, to see weights 
+    # allows to retrieve weights 
     def get_range_fft_weights(self):
         return self.linear.weight
     
-# same as FirstFFTLayer except the fft is done one the third dimensions
+# very similar to FirstFFTLayer except the fft is done one the third dimensions
 # size of fft differ (256 not 512)
 class SecondFFTLinearLayer(nn.Module):
     def __init__(self, input_size,use_fft_weights=True):
@@ -186,7 +186,7 @@ class Hamming_window_range(nn.Module):
     '''
     applies windowing as it is found in Radial repo
     Note: if not applied results can differ in an important way
-    for now we have to set this layer to non trainable.
+    hamming window is often used to avoid sidelobs
     '''
 
     def __init__(self):
@@ -218,7 +218,9 @@ class Hamming_window_doppler(nn.Module):
         print(self.hanning_window_doppler.shape)
         return self.hanning_window_doppler
     
-
+# here we have our four layers gathered
+# We checked its consistency with classical method
+# numerical results are very close to calssical results. 
 class SignalProcessLayer(nn.Module):
     name='signal_process_neural_network'
     def __init__(self,use_fft_weights=True):
@@ -248,9 +250,6 @@ class SignalProcessLayer(nn.Module):
         return self.hamming1.get_window_range_coefficients()
     def get_window_doppler_coeff(self):
         return self.hamming2.get_window_doppler_coefficients()
-
-
-
 
 class SignalProcessLayerV2(nn.Module):
     '''
@@ -296,7 +295,8 @@ def build_fft_by_dot_product_numpy(complex_adc):
     range_fftv2 = np.tensordot(dft_matrix, signal_windowed, axes=([1], [0]))
     return range_fftv2
 
-
+# here we load some raw radar data and compute the time taken by each layer
+# we also check if calculus are correct (extensive use of numpy.allclose())
 if __name__ == '__main__':
 
     hanning_window_range=Hamming_window_range().to('cuda')
@@ -365,10 +365,7 @@ if __name__ == '__main__':
 
         print('max magnitude difference final: ',max_magnitude)
 
-
         radar_data_output_numpy=radar_data_output[0].cpu().detach().numpy()
-
-
         print(30*'#')
         # bias shall always be small:
         bias2=sample_fft-radar_data_output_numpy
@@ -422,23 +419,23 @@ if __name__ == '__main__':
     print('Time difference between separated and aggregated layers: ',mean_fft1+mean_fft2+mean_ham1+mean_ham2-mean_signal_process)
     
     
-#     markdown_content = f"""# Inference Time Report
+    markdown_content = f"""# Inference Time Report
 
 
 
-# This report summarizes the mean inference times (in seconds) for different signal processing steps:
-# - **Number of frames used to compute the time statistics**: `{count}` 
-# - **First FFT layer mean inference time**: `{mean_fft1:.6f}` seconds  
-# - **Second FFT layer mean inference time**: `{mean_fft2:.6f}` seconds  
-# - **Signal process (4 layers) mean inference time**: `{mean_signal_process:.6f}` seconds  
-# - **First Hamming window inference time**: `{mean_ham1:.6f}` seconds  
-# - **Second Hamming window inference time**: `{mean_ham2:.6f}` seconds 
-# - **Gathering of layers improves speed by**: `{time_diff:.6f}` seconds 
+This report summarizes the mean inference times (in seconds) for different signal processing steps:
+- **Number of frames used to compute the time statistics**: `{count}` 
+- **First FFT layer mean inference time**: `{mean_fft1:.6f}` seconds  
+- **Second FFT layer mean inference time**: `{mean_fft2:.6f}` seconds  
+- **Signal process (4 layers) mean inference time**: `{mean_signal_process:.6f}` seconds  
+- **First Hamming window inference time**: `{mean_ham1:.6f}` seconds  
+- **Second Hamming window inference time**: `{mean_ham2:.6f}` seconds 
+- **Gathering of layers improves speed by**: `{time_diff:.6f}` seconds 
 
 
 
-# """
+"""
 
-# with open("inference_report.md", "w") as f:
+# with open("inference_report_final.md", "w") as f:
 #     f.write(markdown_content)
 

@@ -6,14 +6,9 @@ import matplotlib.pyplot as plt
 
 
 ''''
-To be kept for presentation ??
-shows weights after training, good to compare between initial and final
-seems to show it is better to initialize weights with real DFT
-although we have good loss results
+Preliminary work, simple fft layer.
 It is possible to initiate weights with DFT or randomly
-neural network able to learn 1D DFT very efficiently
-
-
+neural network able to learn 1D DFT.
 
 '''
 
@@ -25,12 +20,12 @@ class LearnableDFT(nn.Module):
         k = t.reshape((N, 1))
 
         #Matrices DFT "vraies"
-        F_re = np.cos(2 * np.pi * k * t / N)
-        F_im = -np.sin(2 * np.pi * k * t / N)
+        # F_re = np.cos(2 * np.pi * k * t / N)
+        # F_im = -np.sin(2 * np.pi * k * t / N)
 
         # Matrices DFT aléatoires (pour voir si le réseau apprend)
-        # F_re = np.random.randn(N, N)  
-        # F_im = np.random.randn(N, N)
+        F_re = np.random.randn(N, N)  
+        F_im = np.random.randn(N, N)
 
         self.linear_re = nn.Linear(N, N, bias=False)
         self.linear_im = nn.Linear(N, N, bias=False)

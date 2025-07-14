@@ -31,7 +31,7 @@ from loss_function_relative import complex_relative_mse_loss_v3
 from loss_function_relative import complex_relative_mse_phase_loss
 
 
-from Experimental.learnable_fft_wip2 import SignalProcessLayerV2
+from Experimental.custom_learnable_signal_process_layer import SignalProcessLayerV2
 
 import torch
 

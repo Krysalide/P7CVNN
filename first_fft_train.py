@@ -19,20 +19,19 @@ from ComplexUnet import ComplexLinearNoBias
 from ComplexUnet import get_complex_weights
 from ComplexUnet import visualize_complex_norm,visualize_complex_plane,visualize_complex_weights
 from ComplexCardoidUnet import ComplexUNetCardioid
+
 from neuralop.models import FNO2d
 from neuralop.losses import H1Loss
+
 import torch
-import torch.nn as nn
+
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-from torch.optim.lr_scheduler import StepLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
+
 import mlflow
 
-from p7_utils import list_record_folders,plot_network_loss
-from p7_utils import create_dataloaders, check_gpu_availability
-from p7_utils import normalize_complex_amplitude
+from p7_utils import  check_gpu_availability
 
-from radar_metrics import complex_mse_per_antenna, complex_mae_per_antenna, phase_error_per_antenna, relative_error_per_antenna, real_imag_mse_per_antenna
+from radar_metrics import complex_mse_per_antenna, phase_error_per_antenna
 from data_reader import RadarFFTDataset
 
 from data_reader import split_dataloader
@@ -149,7 +148,7 @@ elif model_type==NetType.TINY_UNET:
         model=TinyComplexUNet(in_channels=in_channels, out_channels=out_channels).to(device)
 
 elif model_type==NetType.ONE_LAYER:
-    raise ValueError
+    
     if resume_training:
         
         PATH='/home/christophe/ComplexNet/FFT/one_layer_net.pth'
@@ -160,28 +159,15 @@ elif model_type==NetType.ONE_LAYER:
         #loss_func=nn.MSELoss() # try it
         loss_function=hybrid_loss
         
-    else:
-        save_path='/home/christophe/ComplexNet/FFT/one_layer_net_one_run.pth'
-        model=ComplexLinearNoBias(in_features=256,out_features=256).to(device=device)
-        raise NotImplementedError('too many changes')
-        model.set_fcr_weight()
-        model.get_fcr_weight()
-        model.set_fci_weight()
-        model.get_fci_weight()
-        
-        sys.exit('tets done')
+
         
 else:
     raise ValueError("Invalid model type")
 
 print('Type of model loaded',model.name)
 learning_rate = 0.05
-# step_size = 10
-# gamma = 1.0
 
 batch_size = 2
-# library higher? 
-#optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,differentiable=False)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
@@ -192,12 +178,12 @@ scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                  min_lr=1e-7,
                                                  threshold=100,threshold_mode='abs')
 
-#scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+
 name_scheduler=scheduler.__class__.__name__
 
 full_data=False
 if not full_data:
-    # use if you want a small set of data
+    
     sequence = 'RECORD@2020-11-22_12.08.31'
     
     data_folder=f'/home/christophe/RADIalP7/SMALL_DATASET/{sequence}'
@@ -206,14 +192,10 @@ if not full_data:
     dataset = RadarFFTDataset(data_folder, indices)
     print(f"Dataset length: {len(dataset)} (took only {len(indices)} samples from sequence: {sequence})")
 
-else:
-    raise ValueError('recursive dataset not yet built for one fft')
-    data_folder='/media/christophe/backup/DATARADIAL'
-    dataset=RadarDatasetV2(data_folder,recursive=True)
-    print(f"Dataset length: {len(dataset)}, gathered all data available from folder: {data_folder} ")
+
 
 ratio_test=1/3
-# for now all data is splited in train and val, no test date
+
 train_loader, val_loader, test_loader = split_dataloader(dataset,batch_size=4,train_ratio=ratio_test,val_ratio=ratio_test,test_ratio=ratio_test)
 print(f"Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}, Test: {len(test_loader.dataset)}")
 
@@ -317,12 +299,9 @@ else:
 
 if model_type==NetType.ONE_LAYER:
     model.eval()
-    #weights=get_complex_weights(model)
     path_complex_weight=visualize_complex_weights(model,interactive=False)
     path_complex_norm=visualize_complex_norm(model,interactive=False)
-    #visualize_complex_plane(model)
-
-
+    
 plt.figure(figsize=(10, 6))
 plt.plot(plot_losses, label='Training Loss')
 plt.xlabel('Epochs')

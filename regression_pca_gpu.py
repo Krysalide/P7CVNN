@@ -1,6 +1,5 @@
-import numpy as np
-import time
-import os
+# some experiments with pca to reduce dimension of data
+# not used
 import torch
 import torch.nn.functional as F
 from sklearn.decomposition import PCA

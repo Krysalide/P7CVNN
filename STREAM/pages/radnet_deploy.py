@@ -16,7 +16,7 @@ NbTxAntenna = 12
 NbRxAntenna = 16
 NbVirtualAntenna = NbTxAntenna * NbRxAntenna
 
-from Experimental.learnable_fft_wip2 import SignalProcessLayer
+from Experimental.custom_learnable_signal_process_layer import SignalProcessLayer
 
 def conv3x3(in_planes, out_planes, stride=1, bias=False):
     """3x3 convolution with padding"""

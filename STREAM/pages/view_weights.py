@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from Experimental.learnable_fft_wip2 import SignalProcessLayer
+from Experimental.custom_learnable_signal_process_layer import SignalProcessLayer
 
 st.set_page_config(layout="wide")
 st.title("🔍 View Weights from SignalProcessLayer")

@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.modules.container import Sequential
-from torchvision.transforms.transforms import Sequence
+
 
 NbTxAntenna = 12
 NbRxAntenna = 16

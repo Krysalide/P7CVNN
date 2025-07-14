@@ -24,7 +24,7 @@ NbVirtualAntenna = NbTxAntenna * NbRxAntenna
 
 
 try:
-    from Experimental.learnable_fft_wip2 import SignalProcessLayer
+    from Experimental.custom_learnable_signal_process_layer import SignalProcessLayer
 except ImportError:
     st.error("Error: Could not import SignalProcessLayer.")
     

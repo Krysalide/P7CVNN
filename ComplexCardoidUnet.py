@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from complexPyTorch.complexLayers import ComplexConv2d, ComplexReLU, ComplexBatchNorm2d, ComplexConvTranspose2d
 
 # to be tested
-from activation_layers import CReLU, CPReLU, Naive_ComplexSigmoid, Naive_ComplexTanh,Cardioid
+from activation_layers import Cardioid
 
 
 class ComplexMaxPool2d(nn.Module):

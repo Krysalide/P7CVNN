@@ -2,16 +2,13 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-import sys
-from torch.autograd import Variable
+
 import math
 
 '''
-Sinc net audio code 
-
+Sinc net audio code out of scope of p7 project
 
 '''
-
 ## Function That I was Talking about, used in SincNet
 def flip(x, dim):
     xsize = x.size()
