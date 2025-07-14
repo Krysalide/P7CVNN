@@ -7,8 +7,7 @@ from glob import glob
 
 
 '''
-Clone of main dataset
-Could be replaced by initial one 
+Datasets
 '''
 
 class RadarDataset(Dataset):
@@ -78,7 +77,7 @@ class RadarFFTDataset(Dataset):
     def __init__(self, save_folder, indices, transform=None, target_transform=None):
         self.save_folder = save_folder
         self.adc_folder=save_folder+'/ADC'
-        #self.fft_folder=save_folder+'/FFT'
+        
         self.fft_range_dopller=save_folder+'/FFT2'
         self.indices = indices
         self.transform = transform

@@ -9,7 +9,7 @@ This file contains our work on migrating the signal process from classical calcu
 (Scipy and or numpy) to neural networks. 
 Our layer can handle complex values such as raw radar data.
 
-The FFT are now applied via a Linear layer wich in turn is the FFT matrix.
+The FFT's are now applied via a Linear layer wich in turn is the FFT matrix.
 It can be initialized randomly or with exact FFT coefficients.
 It can be trained as any pytrorch module (could increase performances).
 Our limitted GPU ressources did not allow us to proove this fact. 

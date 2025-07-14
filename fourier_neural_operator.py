@@ -1,6 +1,6 @@
 import torch
 import torch.nn
-from ComplexUnet import complex_mse_loss,hybrid_loss
+from ComplexUnet import complex_mse_loss
 from ComplexUnet import phase_loss,is_empirically_convex
 from neuralop.models import FNO2d
 from neuralop.losses import H1Loss
