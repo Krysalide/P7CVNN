@@ -37,14 +37,14 @@ st.sidebar.header("Sample Selection")
 # Let the user choose the sample index, starting from 0 (no selection)
 selected_sample_index = st.sidebar.slider(
     "Select Sample Index:",
-    min_value=0, # Use 0 as an 'unselected' or 'initial' state
-    max_value=len(dataset) - 1, # Max index of available samples
-    value=0, # Default value will be the first index (or 0 for 'no selection' if min_value is used this way)
+    min_value=0, 
+    max_value=len(dataset) - 1, 
+    value=0,
     step=1
 )
 
 # --- Conditional Rendering based on Sample Index ---
-if selected_sample_index == 0: # Or if you want a true "no selection" state, use None and check for None
+if selected_sample_index == 0: 
     st.info("Please select a sample index from the slider on the left to view data.")
 else:
     # If a sample is selected, display its index
@@ -59,7 +59,7 @@ else:
     antenna = st.sidebar.slider(
         "Select Antenna Number:",
         min_value=1,
-        max_value=raw_adc_test.shape[-1], # Dynamically set max based on loaded data
+        max_value=raw_adc_test.shape[-1], 
         value=1, # Default to the first antenna
         step=1
     )

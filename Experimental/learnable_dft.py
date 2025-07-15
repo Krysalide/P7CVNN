@@ -11,7 +11,6 @@ It is possible to initiate weights with DFT or randomly
 neural network able to learn 1D DFT.
 
 '''
-
 class LearnableDFT(nn.Module):
     def __init__(self, N, learnable=True):
         super().__init__()

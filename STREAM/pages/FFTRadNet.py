@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+'''
+Contains the whole network FFTRadnet as it is found in Radial repo
+'''
 
 NbTxAntenna = 12
 NbRxAntenna = 16
